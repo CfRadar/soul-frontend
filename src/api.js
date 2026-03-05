@@ -1,7 +1,13 @@
-// base URL for backend. allow override through Vite env (VITE_SERVER_URL)
+// base URL for backend. allow override through Vite env (VITE_API_URL)
 // and make sure we always include a protocol so fetch() doesn't send ":3001/..."
 // which would result in the browser requesting the current host on port 3001.
-let API_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
+let API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+// Debug log in development
+if (import.meta.env.DEV) {
+  console.log("API_URL =", API_URL);
+}
+
 // special case: if the variable is just a port like ":3001", assume localhost
 if (API_URL.startsWith(":")) {
   API_URL = `http://localhost${API_URL}`;
@@ -36,16 +42,37 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
 
+  // Safe JSON parsing - handle HTML error pages (e.g., Vercel 404/500)
+  const contentType = res.headers.get("content-type");
+  const isJson = contentType && contentType.includes("application/json");
+
+  if (!isJson) {
+    // Return a safe error response instead of throwing
+    return {
+      ok: false,
+      error: "bad_response",
+      status: res.status,
+    };
+  }
+
   const text = await res.text();
   let data;
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    throw new Error(text || "Invalid server response");
+    return {
+      ok: false,
+      error: "bad_response",
+      status: res.status,
+    };
   }
 
   if (!res.ok) {
-    throw new Error(data.error || `HTTP ${res.status}`);
+    return {
+      ok: false,
+      error: data.error || `HTTP ${res.status}`,
+      status: res.status,
+    };
   }
 
   return data;
@@ -74,7 +101,20 @@ export async function getMe(token) {
   const res = await fetch(`${API_URL}/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  return res.json();
+  
+  // Safe JSON parsing for getMe
+  const contentType = res.headers.get("content-type");
+  const isJson = contentType && contentType.includes("application/json");
+  
+  if (!isJson) {
+    return { ok: false, error: "bad_response", status: res.status };
+  }
+  
+  try {
+    return await res.json();
+  } catch {
+    return { ok: false, error: "bad_response", status: res.status };
+  }
 }
 
 export async function updateUsername(token, username) {
@@ -86,7 +126,20 @@ export async function updateUsername(token, username) {
     },
     body: JSON.stringify({ username }),
   });
-  return res.json();
+  
+  // Safe JSON parsing for updateUsername
+  const contentType = res.headers.get("content-type");
+  const isJson = contentType && contentType.includes("application/json");
+  
+  if (!isJson) {
+    return { ok: false, error: "bad_response", status: res.status };
+  }
+  
+  try {
+    return await res.json();
+  } catch {
+    return { ok: false, error: "bad_response", status: res.status };
+  }
 }
 
 /* -----------------------------
@@ -118,3 +171,4 @@ export const friendsApi = {
 export async function getLeaderboard(limit = 10) {
   return request(`/leaderboard?limit=${limit}`);
 }
+

@@ -1,19 +1,24 @@
-// client/src/socket.js
 import { io } from "socket.io-client";
 
-let URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3001";
-// if nobody provided a host and only a port, assume localhost first
-if (URL.startsWith(":")) {
-  URL = `http://localhost${URL}`;
-}
-// normalize same way as api.js
-if (!URL.startsWith("http://") && !URL.startsWith("https://")) {
-  URL = `http://${URL}`;
+let SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:3001";
+
+// Debug log in development
+if (import.meta.env.DEV) {
+  console.log("SOCKET_URL =", SOCKET_URL);
 }
 
-export const socket = io(URL, {
+// if nobody provided a host and only a port, assume localhost first
+if (SOCKET_URL.startsWith(":")) {
+  SOCKET_URL = `http://localhost${SOCKET_URL}`;
+}
+// normalize same way as api.js
+if (!SOCKET_URL.startsWith("http://") && !SOCKET_URL.startsWith("https://")) {
+  SOCKET_URL = `http://${SOCKET_URL}`;
+}
+
+export const socket = io(SOCKET_URL, {
   autoConnect: false, // IMPORTANT: connect only after token is ready
-  transports: ["websocket"],
+  transports: ["websocket", "polling"],
 });
 
 export function setSocketToken(token) {
@@ -29,3 +34,4 @@ export function connectSocketWithToken(token) {
 export function disconnectSocket() {
   if (socket.connected) socket.disconnect();
 }
+

@@ -9,6 +9,9 @@ import CursorTrail from "./components/CursorTrail";
 import MenuBackground from "./components/MenuBackground";
 import RankBadge from "./ui/RankBadge";
 
+// Get API URL for wake server call
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 const VIEW = {
   LOGIN: "LOGIN",
   OTP: "OTP",
@@ -59,6 +62,53 @@ export default function App() {
   const [newUsername, setNewUsername] = useState("");
   const [usernameMsg, setUsernameMsg] = useState("");
   const [usernameLoading, setUsernameLoading] = useState(false);
+
+  // Socket connection status for diagnostics
+  const [socketStatus, setSocketStatus] = useState("disconnected");
+
+  // Wake server on app load (for Render free tier)
+  useEffect(() => {
+    fetch(`${API_URL}/`, { method: "GET" }).catch(() => {});
+  }, []);
+
+  // Socket connection diagnostics
+  useEffect(() => {
+    const onConnect = () => setSocketStatus("connected");
+    const onDisconnect = (reason) => {
+      setSocketStatus("disconnected");
+      console.log("[App] Socket disconnected:", reason);
+    };
+    const onReconnectAttempt = (attempt) => {
+      setSocketStatus("reconnecting");
+      console.log("[App] Socket reconnect attempt:", attempt);
+    };
+    const onReconnect = () => {
+      setSocketStatus("connected");
+      console.log("[App] Socket reconnected");
+    };
+    const onError = (err) => {
+      console.log("[App] Socket error:", err);
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.io.on("reconnect_attempt", onReconnectAttempt);
+    socket.io.on("reconnect", onReconnect);
+    socket.io.on("error", onError);
+
+    // Set initial status
+    if (socket.connected) {
+      setSocketStatus("connected");
+    }
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.io.off("reconnect_attempt", onReconnectAttempt);
+      socket.io.off("reconnect", onReconnect);
+      socket.io.off("error", onError);
+    };
+  }, []);
 
   // auto-login if token exists
   useEffect(() => {
@@ -212,12 +262,29 @@ export default function App() {
           {/* Left: Title */}
           <div className="font-mono text-lg md:text-xl tracking-widest">SOUL DUEL</div>
           
-          {/* Center: Mode label (only on MENU) */}
-          {view === VIEW.MENU && (
-            <div className="hidden md:block font-mono text-sm opacity-60 tracking-wider">
-              MAIN MENU
-            </div>
-          )}
+          {/* Center: Mode label (only on MENU) + Socket status */}
+          <div className="hidden md:flex items-center gap-4">
+            {view === VIEW.MENU && (
+              <div className="font-mono text-sm opacity-60 tracking-wider">
+                MAIN MENU
+              </div>
+            )}
+            {/* Socket status indicator */}
+            {me && (
+              <div className={`flex items-center gap-1.5 text-xs font-mono ${
+                socketStatus === "connected" ? "text-green-400" :
+                socketStatus === "reconnecting" ? "text-yellow-400" :
+                "text-red-400"
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  socketStatus === "connected" ? "bg-green-400" :
+                  socketStatus === "reconnecting" ? "bg-yellow-400 animate-pulse" :
+                  "bg-red-400"
+                }`}></span>
+                {socketStatus}
+              </div>
+            )}
+          </div>
           
           {/* Right: Notification bell + Logout (only when logged in) */}
           {me && (

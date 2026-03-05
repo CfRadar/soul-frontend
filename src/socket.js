@@ -1,28 +1,29 @@
 import { io } from "socket.io-client";
 
-// Backend URL - use VITE_BACKEND_URL env var with fallback to deployed Vercel backend
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://soul-backend-nine.vercel.app";
+// Socket URL - use VITE_SOCKET_URL, fallback to VITE_API_URL, then localhost
+const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:3001";
 
 // Debug log in development
 if (import.meta.env.DEV) {
-  console.log("BACKEND_URL =", BACKEND_URL);
+  console.log("SOCKET_URL =", SOCKET_URL);
 }
 
-// Create socket instance with polling only (no WebSocket) for Vercel compatibility
-// This avoids WebSocket upgrade issues on Vercel's serverless environment
-export const socket = io(BACKEND_URL, {
+// Create socket instance with websocket + polling for production compatibility
+export const socket = io(SOCKET_URL, {
   path: "/socket.io",
-  transports: ["polling"],       // Force polling only - no WebSocket
-  upgrade: false,                // Disable WebSocket upgrade
-  auth: {
-    token: null                  // Will be set via setSocketToken
-  },
-  withCredentials: false,        // No credentials needed for polling
-  reconnection: true,            // Enable auto-reconnection
-  reconnectionAttempts: 10,      // Max reconnection attempts
-  reconnectionDelay: 500,         // Delay between attempts (ms)
-  timeout: 20000,                // Connection timeout (ms)
-  autoConnect: false             // IMPORTANT: connect only after token is ready
+  transports: ["websocket", "polling"],
+  upgrade: true,
+  rememberUpgrade: true,
+  withCredentials: false,
+  autoConnect: true,
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 600,
+  reconnectionDelayMax: 2500,
+  timeout: 20000,
 });
 
 // ====== Connection Event Logging ======
@@ -37,17 +38,18 @@ socket.on("disconnect", (reason) => {
 
 socket.on("connect_error", (err) => {
   console.log("[socket] Connection error - message:", err.message);
-  if (err.description) {
-    console.log("[socket] Connection error - description:", err.description);
-  }
 });
 
-socket.on("reconnect_attempt", (attemptNumber) => {
+socket.io.on("reconnect_attempt", (attemptNumber) => {
   console.log("[socket] Reconnect attempt - count:", attemptNumber);
 });
 
-socket.on("reconnect_failed", () => {
-  console.log("[socket] Reconnect failed - gave up after maximum attempts");
+socket.io.on("reconnect", (attemptNumber) => {
+  console.log("[socket] Reconnected after", attemptNumber, "attempts");
+});
+
+socket.io.on("error", (err) => {
+  console.log("[socket] Error:", err);
 });
 
 // ====== Token Management ======

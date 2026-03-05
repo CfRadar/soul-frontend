@@ -1,20 +1,10 @@
 // base URL for backend. allow override through Vite env (VITE_API_URL)
-// and make sure we always include a protocol so fetch() doesn't send ":3001/..."
-// which would result in the browser requesting the current host on port 3001.
-let API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+// Use https:// for production, fallback to localhost:3001 for dev
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 // Debug log in development
 if (import.meta.env.DEV) {
   console.log("API_URL =", API_URL);
-}
-
-// special case: if the variable is just a port like ":3001", assume localhost
-if (API_URL.startsWith(":")) {
-  API_URL = `http://localhost${API_URL}`;
-}
-// otherwise if there's no protocol yet, prepend http://
-if (!API_URL.startsWith("http://") && !API_URL.startsWith("https://")) {
-  API_URL = `http://${API_URL}`;
 }
 
 /* -----------------------------

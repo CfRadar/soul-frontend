@@ -162,3 +162,18 @@ export async function getLeaderboard(limit = 10) {
   return request(`/leaderboard?limit=${limit}`);
 }
 
+/* -----------------------------
+   TIME TRIAL
+----------------------------- */
+export async function getTimeTrialLeaderboard(limit = 50) {
+  return request(`/time-trial/leaderboard?limit=${limit}`);
+}
+
+export async function submitTimeTrial(timeMs) {
+  return request("/time-trial/submit", {
+    method: "POST",
+    auth: true,
+    body: { timeMs },
+  });
+}
+

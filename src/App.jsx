@@ -451,6 +451,17 @@ export default function App() {
                     </button>
 
                     <button
+                      onClick={() => {
+                        setMode("timeTrial");
+                        setView(VIEW.GAME);
+                      }}
+                      className="text-left border border-white/60 rounded-xl p-4 hover:bg-white/10 transition"
+                    >
+                      <div className="text-sm">TIME TRIAL — SOLO</div>
+                      <div className="text-xs opacity-70 mt-1">Survival challenge</div>
+                    </button>
+
+                    <button
                       onClick={() => setView(VIEW.FRIENDS)}
                       className="text-left border border-white/60 rounded-xl p-4 hover:bg-white/10 transition"
                     >

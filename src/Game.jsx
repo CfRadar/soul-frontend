@@ -1,6 +1,7 @@
 // client/src/Game.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
+import { submitTimeTrial } from "./api";
 import RankBadge from "./ui/RankBadge";
 import RankChangeToast from "./ui/RankChangeToast";
 
@@ -139,15 +140,15 @@ function getOpponentName(me, matchInfo) {
 
 // ========== HeaderBar Component (Internal) ==========
 // Clean top HUD bar above canvas - shown during COUNTDOWN + PLAYING
-function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase }) {
+function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase, guardStatus }) {
   const showBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
   
   if (!showBar) return null;
   
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-black border-b border-white/20 min-h-[48px]">
-      {/* Left: Names - w-[34%] min-w-0 */}
-      <div className="w-[34%] min-w-0 flex items-center">
+      {/* Left: Names - w-[30%] min-w-0 */}
+      <div className="w-[30%] min-w-0 flex items-center">
         <span className="font-mono text-sm text-white truncate">
           {myName}
         </span>
@@ -164,12 +165,17 @@ function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase }) {
         </span>
       </div>
       
-      {/* Right: HP - w-[34%] flex justify-end */}
-      <div className="w-[34%] flex justify-end items-center">
-        <span className={`font-mono text-3xl tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
-          {hp}
-        </span>
-        <span className="ml-1 text-xs text-white/50 font-mono">HP</span>
+      {/* Right: HP + Guard - w-[38%] flex justify-end */}
+      <div className="w-[38%] flex justify-end items-center gap-3">
+        <div className="flex items-center">
+          <span className={`font-mono text-3xl tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
+            {hp}
+          </span>
+          <span className="ml-1 text-xs text-white/50 font-mono">HP</span>
+        </div>
+        <div className="text-xs text-white/70 font-mono bg-white/10 px-2 py-1 rounded">
+          GUARD: <span className={guardStatus === "READY" ? "text-lime-400" : "text-white/60"}>{guardStatus}</span>
+        </div>
       </div>
     </div>
   );
@@ -191,6 +197,11 @@ export default function Game({
   const roomIdRef = useRef(null);
 
   const surviveStartRef = useRef(0);
+  const endAtRef = useRef(null); // Frozen timestamp when match ends
+  
+  // Guard skill timing
+  const guardUntilRef = useRef(0); // When guard invincibility expires
+  const guardCdUntilRef = useRef(0); // When guard cooldown expires
   
   // Track previous HP for hit animation
   const prevHpRef = useRef(100);
@@ -222,6 +233,7 @@ export default function Game({
   const [hitFlash, setHitFlash] = useState(false);
   const [hpPulse, setHpPulse] = useState(false);
   const [surviveStart, setSurviveStart] = useState(0);
+  const [endAt, setEndAt] = useState(null); // Frozen end timestamp (freezes timer)
   const [nowMs, setNowMs] = useState(Date.now());
 
   // Enemy info state
@@ -230,6 +242,12 @@ export default function Game({
 
   // Fatal error state
   const [fatalErr, setFatalErr] = useState("");
+
+  // Time Trial submission state
+  const [timeTrialSubmissionStatus, setTimeTrialSubmissionStatus] = useState(null); // null | "submitting" | "success" | "error"
+  const [timeTrialSubmissionMsg, setTimeTrialSubmissionMsg] = useState("");
+  const [bestTimeTrialMs, setBestTimeTrialMs] = useState(0);
+  const [timeTrialImproved, setTimeTrialImproved] = useState(false);
 
   const playerRef = useRef({ x: 0, y: 0, r: 10 });
   const bulletsRef = useRef([]);
@@ -250,13 +268,10 @@ export default function Game({
   // Compute opponent name safely
   const opponentName = getOpponentName(me, matchInfo);
 
-  // Compute timer text
-  const survivalMs =
-    phase === PHASE.PLAYING || phase === PHASE.MATCH_OVER || phase === PHASE.SUMMARY
-      ? Math.max(0, nowMs - surviveStart)
-      : phase === PHASE.COUNTDOWN
-      ? 0
-      : 0;
+  // Compute timer text - use frozen endAt timestamp if match has ended
+  const shouldShowTimer = phase === PHASE.PLAYING || phase === PHASE.MATCH_OVER || phase === PHASE.SUMMARY;
+  const effectiveNow = endAt ?? nowMs; // Use frozen timestamp if match ended
+  const survivalMs = shouldShowTimer ? Math.max(0, effectiveNow - surviveStart) : 0;
   const timerText = fmtMs(survivalMs);
 
   useEffect(() => {
@@ -267,10 +282,12 @@ export default function Game({
     seedRef.current = seed;
   }, [seed]);
 
+  // Update now only during PLAYING phase to avoid unnecessary rerenders when match is frozen
   useEffect(() => {
+    if (phase !== PHASE.PLAYING) return;
     const t = setInterval(() => setNowMs(Date.now()), 100);
     return () => clearInterval(t);
-  }, []);
+  }, [phase]);
 
   function unlockAudio() {
     try {
@@ -321,6 +338,19 @@ export default function Game({
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) {
         e.preventDefault();
       }
+
+      // Guard skill activation (SPACE)
+      if ((k === " " || k === "space") && !e.repeat) {
+        const now = Date.now();
+        if (phaseRef.current === PHASE.PLAYING && isGuardReady(now)) {
+          guardUntilRef.current = now + 1000; // 1s invincibility
+          guardCdUntilRef.current = now + 5000; // 5s cooldown
+          addShake(4, 80); // Small shake for feedback
+        }
+        // Don't add space to movement keys
+        return;
+      }
+
       keysRef.current.add(k);
     };
 
@@ -514,6 +544,29 @@ export default function Game({
     };
   }, [enemySocketId]);
 
+  // --- Time Trial immediate start ---
+  useEffect(() => {
+    if (mode !== "timeTrial") return;
+
+    // Start immediately for time trial
+    const localSeed = Math.floor(Math.random() * 1e9);
+    setSeed(localSeed);
+    
+    setTimeout(() => {
+      phaseRef.current = PHASE.COUNTDOWN;
+      setPhase(PHASE.COUNTDOWN);
+      
+      const countdownStart = Date.now();
+      const countdownDuration = 3000;
+      const gameStart = countdownStart + countdownDuration;
+      setStartAt(gameStart);
+      
+      setTimeout(() => {
+        beginMatch(gameStart, localSeed);
+      }, countdownDuration);
+    }, 100);
+  }, [mode]);
+
   useEffect(() => {
     if (phase !== PHASE.COUNTDOWN || !startAt) return;
 
@@ -526,6 +579,21 @@ export default function Game({
     return () => clearInterval(t);
   }, [phase, startAt]);
 
+  // --- Time Trial: submit score when entering SUMMARY phase ---
+  useEffect(() => {
+    if (mode !== "timeTrial" || phase !== PHASE.SUMMARY) return;
+
+    // Calculate survival time using frozen endAt timestamp
+    const s = surviveStart;
+    if (s <= 0) return;
+
+    const finalTime = endAt ?? nowMs; // Use frozen endAt if available
+    const survivalMs = finalTime - s;
+    if (survivalMs > 0) {
+      submitTimeTrialScore(survivalMs);
+    }
+  }, [mode, phase, surviveStart, endAt, nowMs]);
+
   function resetGameState() {
     setHp(100);
     setEnemyHp(100);
@@ -535,6 +603,10 @@ export default function Game({
     spawnRef.current = { nextSpawnAtMs: 0 };
     lastHitAtRef.current = -9999;
     prevHpRef.current = 100;
+    
+    // Reset guard skill
+    guardUntilRef.current = 0;
+    guardCdUntilRef.current = 0;
 
     shakeRef.current = { until: 0, amp: 0 };
 
@@ -554,6 +626,10 @@ export default function Game({
     surviveStartRef.current = base;
     setSurviveStart(base);
 
+    // Reset end timestamp for new match
+    endAtRef.current = null;
+    setEndAt(null);
+
     setWinnerId(null);
 
     phaseRef.current = PHASE.PLAYING;
@@ -566,6 +642,11 @@ export default function Game({
   }
 
   function endMatch(wid) {
+    // Freeze the timer at the exact moment match ends
+    const now = Date.now();
+    endAtRef.current = now;
+    setEndAt(now);
+
     setWinnerId(wid);
     phaseRef.current = PHASE.MATCH_OVER;
     setPhase(PHASE.MATCH_OVER);
@@ -581,6 +662,7 @@ export default function Game({
     // ✅ If you leave mid-ranked match, count as forfeit (server will apply rating change)
     const rid = roomIdRef.current;
     lastResultRef.current = null;
+    
     if (mode === "ranked" && phaseRef.current === PHASE.PLAYING && rid) {
       socket.emit("game:forfeit", { roomId: rid });
     }
@@ -588,7 +670,9 @@ export default function Game({
     cancelAnimationFrame(rafRef.current);
 
     try {
-      if (phaseRef.current === PHASE.QUEUE) socket.emit("matchmaking:leave");
+      if (phaseRef.current === PHASE.QUEUE && mode !== "timeTrial") {
+        socket.emit("matchmaking:leave");
+      }
     } catch {}
 
     onExit?.();
@@ -596,6 +680,12 @@ export default function Game({
 
   function joinQueue() {
     unlockAudio();
+    
+    // TimeTrial mode: start immediately
+    if (mode === "timeTrial") {
+      return;
+    }
+    
     phaseRef.current = PHASE.QUEUE;
     setPhase(PHASE.QUEUE);
     socket.emit("matchmaking:join", { mode });
@@ -607,21 +697,49 @@ export default function Game({
     setPhase(PHASE.MENU);
   }
 
+  async function submitTimeTrialScore(timeMs) {
+    try {
+      setTimeTrialSubmissionStatus("submitting");
+      setTimeTrialSubmissionMsg("Submitting...");
+      
+      const result = await submitTimeTrial(timeMs);
+      
+      if (result?.ok) {
+        setBestTimeTrialMs(result.bestTimeTrialMs);
+        setTimeTrialImproved(result.improved);
+        
+        if (result.improved) {
+          setTimeTrialSubmissionStatus("success");
+          setTimeTrialSubmissionMsg("New Personal Best! 🎉");
+        } else {
+          setTimeTrialSubmissionStatus("success");
+          setTimeTrialSubmissionMsg("Time submitted");
+        }
+      } else {
+        setTimeTrialSubmissionStatus("error");
+        setTimeTrialSubmissionMsg(result?.error || "Could not submit time (offline?)");
+      }
+    } catch (e) {
+      setTimeTrialSubmissionStatus("error");
+      setTimeTrialSubmissionMsg("Error: " + String(e.message || e));
+    }
+  }
+
   // --- game loop ---
   function spawnBullets(w, h, difficulty = 0) {
     const rand = rngRef.current;
     const pattern = Math.floor(rand() * 3);
 
-    // Scale particle count based on difficulty (4 to 20)
-    const scaledCount = Math.floor(4 + difficulty * 16);
-    // Scale speed based on difficulty (60 to 260)
-    const speedScale = 60 + difficulty * 200;
+    // Scale particle count based on difficulty (4 to 12, slower growth)
+    const scaledCount = Math.floor(4 + difficulty * 8);
+    // Scale speed based on difficulty (60 to 150, slower growth)
+    const speedScale = 60 + difficulty * 90;
 
     if (pattern === 0) {
       const cx = 80 + rand() * (w - 160);
       const cy = 80 + rand() * (h - 160);
       const count = scaledCount;
-      const baseSpeed = 60 + difficulty * 100;
+      const baseSpeed = 60 + difficulty * 50;
       const speed = baseSpeed + rand() * 90;
 
       for (let i = 0; i < count; i++) {
@@ -637,9 +755,9 @@ export default function Game({
       }
     } else if (pattern === 1) {
       const fromLeft = rand() < 0.5;
-      // Scale rows from 3 to 12 based on difficulty
-      const rows = Math.floor(3 + difficulty * 9);
-      const baseSpeed = 60 + difficulty * 150;
+      // Scale rows from 3 to 8 based on difficulty (slower growth)
+      const rows = Math.floor(3 + difficulty * 5);
+      const baseSpeed = 60 + difficulty * 75;
       const speed = baseSpeed + rand() * 120;
 
       for (let i = 0; i < rows; i++) {
@@ -654,9 +772,9 @@ export default function Game({
         });
       }
     } else {
-      // Scale count from 3 to 19 based on difficulty
-      const count = Math.floor(3 + difficulty * 16);
-      const baseSpeed = 60 + difficulty * 180;
+      // Scale count from 3 to 11 based on difficulty (slower growth)
+      const count = Math.floor(3 + difficulty * 8);
+      const baseSpeed = 60 + difficulty * 90;
       const speed = baseSpeed + rand() * 120;
 
       for (let i = 0; i < count; i++) {
@@ -674,6 +792,14 @@ export default function Game({
 
   function isIFrameActive(now) {
     return now - lastHitAtRef.current < 650;
+  }
+
+  function isGuardActive(now) {
+    return now < guardUntilRef.current;
+  }
+
+  function isGuardReady(now) {
+    return now >= guardCdUntilRef.current;
   }
 
   function loop() {
@@ -709,20 +835,20 @@ export default function Game({
     p.x = clamp(p.x + ax * speed * dt, 18, w - 18);
     p.y = clamp(p.y + ay * speed * dt, 18, h - 18);
 
-    // Calculate difficulty factor: 0 at start, 1 at 60 seconds
+    // Calculate difficulty factor: 0 at start, 1 at 120 seconds (slower progression)
     let difficulty = 0;
     const base = surviveStartRef.current;
     if (base > 0) {
       const elapsedMs = now - base;
-      difficulty = clamp(elapsedMs / 60000, 0, 1);
+      difficulty = clamp(elapsedMs / 120000, 0, 1);
 
       let guard = 0;
       while (elapsedMs >= spawnRef.current.nextSpawnAtMs && guard < 50) {
         spawnBullets(w, h, difficulty);
         const rand = rngRef.current;
-        // Scale gap: starts at 800ms, decreases to 300ms at max difficulty
-        let gap = 800 - difficulty * 500;
-        gap = Math.max(250, gap);
+        // Scale gap: starts at 800ms, decreases to 500ms at max difficulty (slower decrease)
+        let gap = 800 - difficulty * 300;
+        gap = Math.max(350, gap);
         spawnRef.current.nextSpawnAtMs += gap;
         guard++;
       }
@@ -739,7 +865,8 @@ export default function Game({
       }
     }
 
-    if (!isIFrameActive(now)) {
+const invincible = isGuardActive(now) || isIFrameActive(now);
+      if (!invincible) {
       for (let i = 0; i < bullets.length; i++) {
         const b = bullets[i];
         const dx = b.x - p.x;
@@ -769,10 +896,19 @@ export default function Game({
             }
             prevHpRef.current = nextHp;
             
-            // Emit HP update to server
-            socket.emit("game:hp", { roomId: roomIdRef.current, hp: nextHp });
-            if (nextHp === 0) {
-              socket.emit("game:death", { roomId: roomIdRef.current });
+            // Emit HP update to server (or locally for timeTrial)
+            if (mode === "timeTrial") {
+              // Time Trial: no socket, just track locally
+              if (nextHp === 0) {
+                // End match locally for time trial
+                endMatch(socket.id);
+              }
+            } else {
+              // Ranked/Friend: use sockets
+              socket.emit("game:hp", { roomId: roomIdRef.current, hp: nextHp });
+              if (nextHp === 0) {
+                socket.emit("game:death", { roomId: roomIdRef.current });
+              }
             }
             return nextHp;
           });
@@ -841,6 +977,15 @@ export default function Game({
       ctx.stroke();
     }
 
+    // Draw guard ring if active
+    if (isGuardActive(now)) {
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r + 8, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // player heart (KEEP ORIGINAL COLOR)
     const iframe = isIFrameActive(now);
     ctx.save();
@@ -866,6 +1011,10 @@ export default function Game({
   const vsMode = matchInfo?.mode || mode;
   const vsLeft = left;
   const vsRight = right;
+
+  // Compute guard status for HUD display
+  const guardCdRem = Math.max(0, guardCdUntilRef.current - nowMs);
+  const guardStatus = guardCdRem <= 0 ? "READY" : (guardCdRem / 1000).toFixed(1) + "s";
 
   // derive text for summary card
   const lastResult = lastResultRef.current;
@@ -935,7 +1084,7 @@ export default function Game({
           <div className="flex items-center justify-between mb-3">
             <div className="text-sm text-white/80">
               <span className="font-semibold text-white">
-                Soul Duel {vsMode === "ranked" ? "• Ranked" : "• Friend"}
+                Soul Duel {vsMode === "ranked" ? "• Ranked" : vsMode === "friend" ? "• Friend" : "• Solo Time Trial"}
               </span>{" "}
               <span className="opacity-70">•</span>{" "}
               <span className="opacity-80">socket:</span> {socketStatus}
@@ -955,6 +1104,7 @@ export default function Game({
             timerText={timerText}
             hpHitPulse={hpPulse}
             phase={phase}
+            guardStatus={guardStatus}
           />
 
           {/* Menu Phase: Top HUD */}
@@ -1017,8 +1167,8 @@ export default function Game({
             />
           </div>
 
-          {/* MENU Overlay */}
-          {phase === PHASE.MENU && (
+          {/* MENU Overlay - not shown for time trial */}
+          {phase === PHASE.MENU && mode !== "timeTrial" && (
             <Overlay>
               <div className="text-center">
                 <div className="text-4xl font-extrabold tracking-tight">SOUL DUEL</div>
@@ -1049,8 +1199,8 @@ export default function Game({
             </Overlay>
           )}
 
-          {/* QUEUE Overlay */}
-          {phase === PHASE.QUEUE && (
+          {/* QUEUE Overlay - not shown for time trial */}
+          {phase === PHASE.QUEUE && mode !== "timeTrial" && (
             <Overlay>
               <div className="text-center">
                 <div className="text-2xl font-bold">Finding match…</div>
@@ -1134,16 +1284,50 @@ export default function Game({
           {phase === PHASE.SUMMARY && (
             <Overlay>
               <div className="text-center max-w-xl">
-                <div className="text-3xl font-extrabold">
-                  {iAmWinner ? "Victory" : "Defeat"}
-                </div>
+                {mode === "timeTrial" ? (
+                  <>
+                    <div className="text-3xl font-extrabold">
+                      {hp > 0 ? "Survived" : "Game Over"}
+                    </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 text-left">
-                  <Stat label="Survival Time" value={timerText} />
-                  <Stat label="HP Remaining" value={String(hp)} />
-                  <Stat label="Rank Change" value={rankChangeText || "—"} />
-                  <Stat label="Summary" value={summaryText || ""} />
-                </div>
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+                      <Stat label="Survival Time" value={timerText} />
+                      <Stat label="HP Remaining" value={String(hp)} />
+                      {bestTimeTrialMs > 0 && (
+                        <>
+                          <Stat label="Best Time" value={fmtMs(bestTimeTrialMs)} />
+                          <Stat 
+                            label="Status" 
+                            value={timeTrialImproved ? "New Best!" : "Submitted"} 
+                          />
+                        </>
+                      )}
+                    </div>
+
+                    {timeTrialSubmissionStatus && (
+                      <div className={`mt-3 text-sm font-mono ${
+                        timeTrialSubmissionStatus === "success" ? "text-green-400" :
+                        timeTrialSubmissionStatus === "error" ? "text-red-400" :
+                        "text-white/80"
+                      }`}>
+                        {timeTrialSubmissionMsg}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div className="text-3xl font-extrabold">
+                      {iAmWinner ? "Victory" : "Defeat"}
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+                      <Stat label="Survival Time" value={timerText} />
+                      <Stat label="HP Remaining" value={String(hp)} />
+                      <Stat label="Rank Change" value={rankChangeText || "—"} />
+                      <Stat label="Summary" value={summaryText || ""} />
+                    </div>
+                  </>
+                )}
 
                 <button
                   onClick={exitToMenu}

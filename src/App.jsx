@@ -12,6 +12,10 @@ import RankBadge from "./ui/RankBadge";
 // Get API URL for wake server call
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
+// Debug: Verify environment values are loaded
+console.log("API_URL:", import.meta.env.VITE_API_URL);
+console.log("SOCKET_URL:", import.meta.env.VITE_SOCKET_URL);
+
 const VIEW = {
   LOGIN: "LOGIN",
   OTP: "OTP",

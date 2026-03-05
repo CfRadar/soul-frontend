@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+/* Undertale-style animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(255, 255, 255, 1); }
+}
+
+@keyframes scanline {
+  0% { background-position: -100% 0; }
+  100% { background-position: 100% 0; }
+}
+
+/* Shimmer effect for silver rank */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Slow spin for platinum rank */
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Prism glint for diamond rank */
+@keyframes prism {
+  0%, 100% { transform: rotate(45deg) translateX(-20px); opacity: 0; }
+  10% { opacity: 0.3; }
+  50% { transform: rotate(45deg) translateX(20px); opacity: 0.2; }
+  90% { opacity: 0.3; }
+}
+
+/* Spark flicker for legendary rank */
+@keyframes spark {
+  0%, 100% { opacity: 0; transform: scale(0.5); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulseGlow {
+  animation: pulseGlow 1s ease-in-out infinite;
+}
+
+.animate-scanline {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background-size: 200% 100%;
+  animation: scanline 2s linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 8s linear infinite;
+}
+
+.animate-prism {
+  animation: prism 4s ease-in-out infinite;
+}
+
+.animate-spark {
+  animation: spark 0.6s ease-in-out infinite;
+}

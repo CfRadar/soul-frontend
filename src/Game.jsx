@@ -252,6 +252,8 @@ export default function Game({
   const playerRef = useRef({ x: 0, y: 0, r: 10 });
   const bulletsRef = useRef([]);
   const spawnRef = useRef({ nextSpawnAtMs: 0 });
+  const powerupRef = useRef({ active: null, nextSpawnAtMs: 10000 });
+  const healTextRef = useRef({ text: "", until: 0 });
   const bossRef = useRef({
     state: "IDLE",
     animTime: 0,
@@ -384,6 +386,41 @@ export default function Game({
 
       osc.start(now);
       osc.stop(now + 0.07);
+    } catch {}
+  }
+
+  function playHealSound(amount = 20) {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "sine";
+      const now = ctx.currentTime;
+      
+      if (amount >= 50) {
+        // Stronger boss heal
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.linearRampToValueAtTime(880, now + 0.2);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.2, now + 0.1);
+        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      } else {
+        // Soft collection chime
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        osc.frequency.exponentialRampToValueAtTime(1046.5, now + 0.15); // C6
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.15, now + 0.05);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      }
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
     } catch {}
   }
 
@@ -663,6 +700,8 @@ export default function Game({
     setHpPulse(false);
     bulletsRef.current = [];
     spawnRef.current = { nextSpawnAtMs: 0 };
+    powerupRef.current = { active: null, nextSpawnAtMs: 10000 };
+    healTextRef.current = { text: "", until: 0 };
     bossRef.current = {
       state: "IDLE",
       animTime: 0,
@@ -1027,6 +1066,16 @@ export default function Game({
         boss.lasers = [];
         spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // brief pause after boss
         addShake(15, 500);
+        
+        // BOSS FIGHT HEAL
+        setHp((old) => {
+          const newHp = Math.min(100, old + 50);
+          if (newHp > old) playHealSound(50);
+          return newHp;
+        });
+        healTextRef.current = { text: "+50 HP RESTORED", until: now + 2500 };
+        setHpPulse(true);
+        setTimeout(() => setHpPulse(false), 300);
       }
 
       const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE";
@@ -1046,6 +1095,29 @@ export default function Game({
       if (boss.state === "ACTIVE") {
         updateBoss(w, h, dt, elapsedMs);
       }
+
+      // POWERUP SPAWNING
+      const pRef = powerupRef.current;
+      if (!isBossTime && elapsedMs >= pRef.nextSpawnAtMs) {
+        if (!pRef.active) { // only spawn if one isn't currently active
+          const rand = rngRef.current;
+          pRef.active = {
+            x: 60 + rand() * (w - 120),
+            y: 60 + rand() * (h - 120),
+            r: 12,
+            spawnedAtMs: elapsedMs,
+            expiresAtMs: elapsedMs + 3000,
+            kind: "HEAL"
+          };
+        }
+        pRef.nextSpawnAtMs = elapsedMs + 10000; // next check in 10s
+      }
+
+      // POWERUP EXPIRY
+      if (pRef.active && elapsedMs > pRef.active.expiresAtMs) {
+        pRef.active = null;
+      }
+
     }
 
     const bullets = bulletsRef.current;
@@ -1151,6 +1223,24 @@ export default function Game({
          }
       }
     }
+
+    // POWERUP COLLECTION
+    const pRef = powerupRef.current;
+    if (pRef.active) {
+      const dist = Math.hypot(pRef.active.x - p.x, pRef.active.y - p.y);
+      if (dist < p.r + pRef.active.r) {
+        setHp((old) => {
+          const nextHp = Math.min(100, old + 20);
+          if (nextHp > old) playHealSound(20);
+          return nextHp;
+        });
+        healTextRef.current = { text: "+20 HP", until: now + 1500 };
+        setHpPulse(true);
+        setTimeout(() => setHpPulse(false), 200);
+        pRef.active = null; // consume
+      }
+    }
+
     ctx.clearRect(0, 0, w, h);
 
     // screen shake
@@ -1285,10 +1375,43 @@ export default function Game({
              } else {
                  ctx.fillRect(L.x - th/2, 0, th, h);
              }
-             ctx.shadowBlur = 0;
-          }
-       }
-    }
+              ctx.shadowBlur = 0;
+           }
+        }
+     }
+
+     // Draw Powerup
+     const powerup = powerupRef.current?.active;
+     if (powerup) {
+       const pr = powerup.r;
+       const px = powerup.x;
+       const py = powerup.y;
+       
+       // Subtle pulse animation
+       const pAlpha = 0.6 + 0.4 * Math.abs(Math.sin(now / 150));
+       
+       ctx.save();
+       ctx.translate(px, py);
+       
+       // Highlight aura
+       ctx.shadowColor = "rgba(100, 255, 100, 0.8)";
+       ctx.shadowBlur = 10;
+       
+       // Plus sign (Green/White)
+       ctx.fillStyle = `rgba(200, 255, 200, ${pAlpha})`;
+       const th = pr * 0.4;
+       ctx.fillRect(-pr, -th/2, pr*2, th); // Horizontal
+       ctx.fillRect(-th/2, -pr, th, pr*2); // Vertical
+       
+       // Outline around plus sign
+       ctx.strokeStyle = `rgba(255, 255, 255, ${pAlpha * 0.8})`;
+       ctx.lineWidth = 1;
+       ctx.beginPath();
+       ctx.arc(0, 0, pr + 4, 0, Math.PI * 2);
+       ctx.stroke();
+       
+       ctx.restore();
+     }
 
     // Draw guard ring if active
     if (isGuardActive(now)) {
@@ -1307,6 +1430,28 @@ export default function Game({
     ctx.fillStyle = "rgba(255, 80, 120, 0.98)"; // ✅ unchanged
     drawHeart(ctx, 0, 0, 12);
     ctx.restore();
+
+    // Draw Heal Floating Text (HUD level)
+    const healMsg = healTextRef.current;
+    if (now < healMsg.until) {
+      const remain = healMsg.until - now;
+      const tAlpha = clamp(remain / 400, 0, 1);
+      const floatY = 40 - clamp((1500 - remain) / 30, 0, 15);
+      
+      ctx.fillStyle = `rgba(150, 255, 150, ${tAlpha})`;
+      ctx.font = "bold 18px monospace";
+      ctx.textAlign = "center";
+      ctx.shadowColor = "rgba(0, 255, 0, 0.5)";
+      ctx.shadowBlur = 5;
+      
+      // Draw centered above player if +20, or high up if +50
+      if (healMsg.text.includes("50")) {
+        ctx.fillText(healMsg.text, w/2, h/2 - 80 - (2500 - remain) / 50);
+      } else {
+        ctx.fillText(healMsg.text, p.x, p.y - floatY);
+      }
+      ctx.shadowBlur = 0;
+    }
 
     ctx.restore();
 

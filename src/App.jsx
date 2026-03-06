@@ -8,7 +8,7 @@ import NotificationsModal from "./NotificationsModal";
 import CursorTrail from "./components/CursorTrail";
 import MenuBackground from "./components/MenuBackground";
 import RankBadge from "./ui/RankBadge";
-
+import BossesMenu from "./BossesMenu";
 // Get API URL for wake server call
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -21,6 +21,7 @@ const VIEW = {
   OTP: "OTP",
   MENU: "MENU",
   FRIENDS: "FRIENDS",
+  BOSSES: "BOSSES",
   GAME: "GAME",
 };
 
@@ -58,7 +59,8 @@ export default function App() {
   const [token, setToken] = useState(localStorage.getItem("sd_token") || "");
   const [me, setMe] = useState(null);
 
-  const [mode, setMode] = useState("ranked"); // ranked | friend
+  const [mode, setMode] = useState("ranked"); // ranked | friend | timeTrial | boss
+  const [selectedBossId, setSelectedBossId] = useState(null);
   const [notifOpen, setNotifOpen] = useState(false);
 
   // Change username modal state
@@ -233,7 +235,11 @@ export default function App() {
         me={me}
         token={token}
         mode={mode}
-        onExit={() => setView(VIEW.MENU)}
+        bossId={selectedBossId}
+        onExit={() => {
+            setView(mode === "boss" ? VIEW.BOSSES : VIEW.MENU);
+            setSelectedBossId(null);
+        }}
         onMeUpdate={setMe}
       />
     );
@@ -468,6 +474,14 @@ export default function App() {
                       <div className="text-sm">FRIENDS</div>
                       <div className="text-xs opacity-70 mt-1">Send/accept requests + invite</div>
                     </button>
+
+                    <button
+                      onClick={() => setView(VIEW.BOSSES)}
+                      className="text-left border border-white/60 rounded-xl p-4 hover:bg-white/10 transition"
+                    >
+                      <div className="text-sm">BOSSES</div>
+                      <div className="text-xs opacity-70 mt-1">Fight unlocked bosses again</div>
+                    </button>
                   </div>
                 </div>
 
@@ -477,6 +491,20 @@ export default function App() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* BOSSES view */}
+          {view === VIEW.BOSSES && me && (
+            <BossesMenu
+              me={me}
+              token={token}
+              onBack={() => setView(VIEW.MENU)}
+              onStartBoss={(bid) => {
+                setMode("boss");
+                setSelectedBossId(bid);
+                setView(VIEW.GAME);
+              }}
+            />
           )}
         </div>
       </div>

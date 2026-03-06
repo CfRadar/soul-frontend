@@ -1,7 +1,7 @@
 // client/src/Game.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
-import { submitTimeTrial } from "./api";
+import { submitTimeTrial, unlockBoss } from "./api";
 import RankBadge from "./ui/RankBadge";
 import RankChangeToast from "./ui/RankChangeToast";
 
@@ -190,7 +190,9 @@ function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase, guardSta
 
 export default function Game({
   me,
+  token,
   mode = "ranked",
+  bossId = null,
   friendTargetUid = null,
   onExit,
   onMeUpdate,
@@ -211,6 +213,9 @@ export default function Game({
   const guardCdUntilRef = useRef(0); // When guard cooldown expires
   // Corrupt Heal powerup timing
   const corruptHealUntilRef = useRef(0); // When corrupt heal expires
+
+  // Track if a boss unlock event was fired to prevent API spam
+  const bossUnlockFiredRef = useRef({ boss_base: false, boss_radiance: false });
 
   // Track previous HP for hit animation
   const prevHpRef = useRef(100);
@@ -244,6 +249,10 @@ export default function Game({
   const [surviveStart, setSurviveStart] = useState(0);
   const [endAt, setEndAt] = useState(null); // Frozen end timestamp (freezes timer)
   const [nowMs, setNowMs] = useState(Date.now());
+
+  // Radiance Boss Ranked Sync
+  const [radianceWaiting, setRadianceWaiting] = useState(false);
+  const radianceRankedFinishedRef = useRef(false);
 
   // Enemy info state
   const [enemyName, setEnemyName] = useState("OPPONENT");
@@ -297,7 +306,7 @@ export default function Game({
     bossPauseStart: 0,
     bossPauseTotal: 0,
   });
-  
+
   // Visual particles for Radiance enhancements
   const radParticlesRef = useRef({
     ambient: [],
@@ -316,20 +325,20 @@ export default function Game({
   // Compute my name safely
   const myName = me?.username ? safeUsername(me.username) : "YOU";
   // Compute opponent name safely
-  const opponentName = getOpponentName(me, matchInfo);
+  const opponentName = mode === "boss" ? "BOSS ENTITY" : getOpponentName(me, matchInfo);
 
   // Compute timer text - use frozen endAt timestamp if match has ended
   const shouldShowTimer = phase === PHASE.PLAYING || phase === PHASE.MATCH_OVER || phase === PHASE.SUMMARY;
   const effectiveNow = endAt ?? nowMs; // Use frozen timestamp if match ended
   let survivalMs = shouldShowTimer ? Math.max(0, effectiveNow - surviveStart) : 0;
-  
+
   const radState = radianceBossRef.current;
-  if (radState.triggered) {
-      if (!radState.defeated) {
-          survivalMs = radState.bossPauseStart;
-      } else {
-          survivalMs = Math.max(0, survivalMs - radState.bossPauseTotal);
-      }
+  if (radState.triggered && mode !== "boss") {
+    if (!radState.defeated) {
+      survivalMs = radState.bossPauseStart;
+    } else {
+      survivalMs = Math.max(0, survivalMs - radState.bossPauseTotal);
+    }
   }
 
   const timerText = fmtMs(survivalMs);
@@ -480,16 +489,16 @@ export default function Game({
       if (!ctx || !audioUnlockedRef.current) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
+
       osc.type = "sawtooth";
       const now = ctx.currentTime;
       osc.frequency.setValueAtTime(100, now);
       osc.frequency.exponentialRampToValueAtTime(50, now + 1.5);
-      
+
       gain.gain.setValueAtTime(0, now);
       gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
       gain.gain.linearRampToValueAtTime(0, now + 1.5);
-      
+
       osc.start(now);
       osc.stop(now + 1.5);
       osc.connect(gain);
@@ -503,15 +512,15 @@ export default function Game({
       if (!ctx || !audioUnlockedRef.current) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
+
       osc.type = "sine";
       const now = ctx.currentTime;
       osc.frequency.setValueAtTime(800, now);
       osc.frequency.linearRampToValueAtTime(2000, now + 1.0);
-      
+
       gain.gain.setValueAtTime(0, now);
       gain.gain.linearRampToValueAtTime(0.1, now + 1.0);
-      
+
       osc.start(now);
       osc.stop(now + 1.0);
       osc.connect(gain);
@@ -525,15 +534,15 @@ export default function Game({
       if (!ctx || !audioUnlockedRef.current) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
+
       osc.type = "square";
       const now = ctx.currentTime;
       osc.frequency.setValueAtTime(400, now);
       osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
-      
+
       gain.gain.setValueAtTime(0.3, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-      
+
       osc.start(now);
       osc.stop(now + 0.4);
       osc.connect(gain);
@@ -577,23 +586,23 @@ export default function Game({
           rad.sonicBoomUntil = Date.now() + 500;
           rad.hp = Math.max(0, rad.hp - 20);
           addShake(20, 600);
-          playLaserFireSound(); 
-          
+          playLaserFireSound();
+
           // Spawn boom visuals
           radParticlesRef.current.booms.push({ r: 10, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600), life: 0.5, elapsed: 0 });
           radParticlesRef.current.booms.push({ r: 5, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600) * 0.8, life: 0.6, elapsed: 0, delay: 0.1 });
-          
+
           // Spawn boss hit sparks
           const bx = (window.innerWidth || 900) / 2;
           const by = 120;
-          for(let i = 0; i < 30; i++) {
-             const ang = Math.random() * Math.PI * 2;
-             const spd = 200 + Math.random() * 400;
-             radParticlesRef.current.sparks.push({
-               x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
-               life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
-               color: Math.random() > 0.5 ? "white" : "gold"
-             });
+          for (let i = 0; i < 30; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            const spd = 200 + Math.random() * 400;
+            radParticlesRef.current.sparks.push({
+              x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+              life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
+              color: Math.random() > 0.5 ? "white" : "gold"
+            });
           }
 
           if (rad.hp <= 0 && !rad.defeated) {
@@ -605,23 +614,23 @@ export default function Game({
             rad.homingOrbs = [];
             rad.lasers = [];
             rad.wallSpikes = [];
-            
+
             // INCREASE MAX HP TO 150
             maxHpRef.current = 150;
             setHp(150);
             healTextRef.current = { text: "MAX HP INCREASED!", until: Date.now() + 3000 };
             setHpPulse(true);
             setTimeout(() => setHpPulse(false), 500);
-            
+
             // Death explosion particles
-            for(let i = 0; i < 60; i++) {
-               const ang = Math.random() * Math.PI * 2;
-               const spd = 100 + Math.random() * 600;
-               radParticlesRef.current.sparks.push({
-                 x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
-                 life: 0.8 + Math.random() * 0.7, elapsed: 0, r: 3 + Math.random() * 5,
-                 color: "white"
-               });
+            for (let i = 0; i < 60; i++) {
+              const ang = Math.random() * Math.PI * 2;
+              const spd = 100 + Math.random() * 600;
+              radParticlesRef.current.sparks.push({
+                x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+                life: 0.8 + Math.random() * 0.7, elapsed: 0, r: 3 + Math.random() * 5,
+                color: "white"
+              });
             }
           }
         }
@@ -733,6 +742,17 @@ export default function Game({
       }
     });
 
+    socket.on("radiance:wait", () => {
+      setRadianceWaiting(true);
+    });
+
+    socket.on("radiance:resumeNormal", ({ resumeAt }) => {
+      const delay = Math.max(0, (resumeAt || Date.now()) - Date.now());
+      setTimeout(() => {
+         setRadianceWaiting(false);
+      }, delay);
+    });
+
     socket.on("game:matchOver", (data) => {
       try {
         const { winnerId, loserId, winner, loser, mode } = data;
@@ -818,14 +838,16 @@ export default function Game({
       socket.off("game:start");
       socket.off("hpUpdate");
       socket.off("game:matchOver");
+      socket.off("radiance:wait");
+      socket.off("radiance:resumeNormal");
     };
   }, [enemySocketId]);
 
-  // --- Time Trial immediate start ---
+  // --- Time Trial / Boss immediate start ---
   useEffect(() => {
-    if (mode !== "timeTrial") return;
+    if (mode !== "timeTrial" && mode !== "boss") return;
 
-    // Start immediately for time trial
+    // Start immediately for time trial or bosses
     const localSeed = Math.floor(Math.random() * 1e9);
     setSeed(localSeed);
 
@@ -868,13 +890,13 @@ export default function Game({
     let survivalMs = finalTime - s;
     const radState = radianceBossRef.current;
     if (radState.triggered) {
-        if (!radState.defeated) {
-            survivalMs = radState.bossPauseStart;
-        } else {
-            survivalMs = Math.max(0, survivalMs - radState.bossPauseTotal);
-        }
+      if (!radState.defeated) {
+        survivalMs = radState.bossPauseStart;
+      } else {
+        survivalMs = Math.max(0, survivalMs - radState.bossPauseTotal);
+      }
     }
-    
+
     if (survivalMs > 0) {
       submitTimeTrialScore(survivalMs);
     }
@@ -1006,8 +1028,8 @@ export default function Game({
   function joinQueue() {
     unlockAudio();
 
-    // TimeTrial mode: start immediately
-    if (mode === "timeTrial") {
+    // TimeTrial & Boss mode: start immediately
+    if (mode === "timeTrial" || mode === "boss") {
       return;
     }
 
@@ -1268,11 +1290,22 @@ export default function Game({
     let difficulty = 0;
     const base = surviveStartRef.current;
     if (base > 0) {
-      const elapsedMs = now - base;
+      let elapsedMs = now - base;
+
+      // Fast-forward script time for standalone Bosses mode to trigger phases instantly
+      if (mode === "boss") {
+        if (bossId === "boss_base" && elapsedMs < 30000) elapsedMs += 30000;
+        if (bossId === "boss_radiance" && elapsedMs < 90000) elapsedMs += 90000;
+      }
+
       difficulty = clamp(elapsedMs / 120000, 0, 1);
 
       const boss = bossRef.current;
       if (boss.state === "IDLE" && elapsedMs >= 30000) {
+        if (mode !== "boss" && !bossUnlockFiredRef.current.boss_base) {
+          bossUnlockFiredRef.current.boss_base = true;
+          unlockBoss(token, "boss_base").catch(err => console.log(err));
+        }
         boss.state = "WARNING";
         bulletsRef.current = []; // clear existing bullets cleanly
         addShake(20, 1500);
@@ -1300,6 +1333,10 @@ export default function Game({
 
       const rad = radianceBossRef.current;
       if (!rad.triggered && elapsedMs >= 90000 && !rad.defeated) {
+        if (mode !== "boss" && !bossUnlockFiredRef.current.boss_radiance) {
+          bossUnlockFiredRef.current.boss_radiance = true;
+          unlockBoss(token, "boss_radiance").catch(err => console.log(err));
+        }
         rad.triggered = true;
         rad.warning = true;
         rad.warningStartMs = elapsedMs;
@@ -1324,104 +1361,123 @@ export default function Game({
           const attackType = Math.floor(rngRef.current() * 3);
           rad.attackType = attackType;
           if (attackType === 0) {
-             // following orbs
-             rad.homingOrbs.push({ x: w/2, y: 100, vx: 0, vy: 0, r: 10 });
-             rad.homingOrbs.push({ x: w/2 - 50, y: 100, vx: 0, vy: 0, r: 10 });
-             rad.homingOrbs.push({ x: w/2 + 50, y: 100, vx: 0, vy: 0, r: 10 });
+            // following orbs
+            rad.homingOrbs.push({ x: w / 2, y: 100, vx: 0, vy: 0, r: 10 });
+            rad.homingOrbs.push({ x: w / 2 - 50, y: 100, vx: 0, vy: 0, r: 10 });
+            rad.homingOrbs.push({ x: w / 2 + 50, y: 100, vx: 0, vy: 0, r: 10 });
           } else if (attackType === 1) {
-             // spikes at walls
-             const isVert = rngRef.current() > 0.5;
-             if (isVert) {
-               rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current()*(w-40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
-               rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current()*(w-40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
-             } else {
-               rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current()*(h-40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
-               rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current()*(h-40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
-             }
+            // spikes at walls
+            const isVert = rngRef.current() > 0.5;
+            if (isVert) {
+              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
+              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
+            } else {
+              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
+              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
+            }
           } else if (attackType === 2) {
-             // rotating lasers
-             rad.lasers.push({ cx: w/2, cy: 120, angle: 0, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
-             rad.lasers.push({ cx: w/2, cy: 120, angle: Math.PI, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
-             playLaserChargeSound();
+            // rotating lasers
+            rad.lasers.push({ cx: w / 2, cy: 120, angle: 0, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
+            rad.lasers.push({ cx: w / 2, cy: 120, angle: Math.PI, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
+            playLaserChargeSound();
           }
           rad.nextAttackAtMs = elapsedMs + 3500 + rngRef.current() * 1500;
         }
 
         // Update attacks
         for (let i = rad.homingOrbs.length - 1; i >= 0; i--) {
-           const orb = rad.homingOrbs[i];
-           const dx = p.x - orb.x;
-           const dy = p.y - orb.y;
-           const dist = Math.hypot(dx, dy) || 1;
-           const targetSpeed = 100;
-           orb.vx += (dx / dist) * 150 * dt;
-           orb.vy += (dy / dist) * 150 * dt;
-           const curSpeed = Math.hypot(orb.vx, orb.vy);
-           if (curSpeed > targetSpeed) {
-              orb.vx = (orb.vx / curSpeed) * targetSpeed;
-              orb.vy = (orb.vy / curSpeed) * targetSpeed;
-           }
-           orb.x += orb.vx * dt;
-           orb.y += orb.vy * dt;
-           if (elapsedMs > rad.bossStartMs + 60000 && curSpeed > 300) rad.homingOrbs.splice(i, 1);
+          const orb = rad.homingOrbs[i];
+          const dx = p.x - orb.x;
+          const dy = p.y - orb.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const targetSpeed = 100;
+          orb.vx += (dx / dist) * 150 * dt;
+          orb.vy += (dy / dist) * 150 * dt;
+          const curSpeed = Math.hypot(orb.vx, orb.vy);
+          if (curSpeed > targetSpeed) {
+            orb.vx = (orb.vx / curSpeed) * targetSpeed;
+            orb.vy = (orb.vy / curSpeed) * targetSpeed;
+          }
+          orb.x += orb.vx * dt;
+          orb.y += orb.vy * dt;
+          if (elapsedMs > rad.bossStartMs + 60000 && curSpeed > 300) rad.homingOrbs.splice(i, 1);
         }
 
         for (let i = rad.wallSpikes.length - 1; i >= 0; i--) {
-           const sp = rad.wallSpikes[i];
-           sp.timer += dt;
-           if (sp.state === "WARN" && sp.timer > 1.0) {
-              sp.state = "EXTEND";
-              sp.timer = 0;
-           } else if (sp.state === "EXTEND") {
-              sp.length += 800 * dt;
-              if (sp.length >= sp.maxLength) { sp.length = sp.maxLength; sp.state = "RETRACT"; }
-           } else if (sp.state === "RETRACT") {
-              sp.length -= 400 * dt;
-              if (sp.length <= 0) rad.wallSpikes.splice(i, 1);
-           }
+          const sp = rad.wallSpikes[i];
+          sp.timer += dt;
+          if (sp.state === "WARN" && sp.timer > 1.0) {
+            sp.state = "EXTEND";
+            sp.timer = 0;
+          } else if (sp.state === "EXTEND") {
+            sp.length += 800 * dt;
+            if (sp.length >= sp.maxLength) { sp.length = sp.maxLength; sp.state = "RETRACT"; }
+          } else if (sp.state === "RETRACT") {
+            sp.length -= 400 * dt;
+            if (sp.length <= 0) rad.wallSpikes.splice(i, 1);
+          }
         }
 
         for (let i = rad.lasers.length - 1; i >= 0; i--) {
-           const L = rad.lasers[i];
-           const wasCharging = L.elapsed < L.chargeTime;
-           L.elapsed += dt;
-           if (wasCharging && L.elapsed >= L.chargeTime) {
-               playLaserFireSound();
-               addShake(12, 200);
-           }
-           if (L.elapsed >= L.chargeTime + L.activeTime) {
-               rad.lasers.splice(i, 1);
-           } else if (L.elapsed >= L.chargeTime) {
-               L.angle += L.rotSpeed * dt;
-           }
+          const L = rad.lasers[i];
+          const wasCharging = L.elapsed < L.chargeTime;
+          L.elapsed += dt;
+          if (wasCharging && L.elapsed >= L.chargeTime) {
+            playLaserFireSound();
+            addShake(12, 200);
+          }
+          if (L.elapsed >= L.chargeTime + L.activeTime) {
+            rad.lasers.splice(i, 1);
+          } else if (L.elapsed >= L.chargeTime) {
+            L.angle += L.rotSpeed * dt;
+          }
         }
-        
+
         // Orb collection logic
         if (rad.collectibleOrb && !rad.sonicBoomActive) {
-           const orb = rad.collectibleOrb;
-           const dist = Math.hypot(p.x - orb.x, p.y - orb.y);
-           if (dist < p.r + orb.r) {
-              rad.orbCharge = Math.min(rad.orbChargeMax, rad.orbCharge + 1);
-              playHealSound(20);
-              rad.collectibleOrb = null;
-              if (rad.orbCharge < rad.orbChargeMax) {
-                 setTimeout(() => {
-                    if (radianceBossRef.current.active && !radianceBossRef.current.sonicBoomActive) {
-                       radianceBossRef.current.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
-                    }
-                 }, 600);
-              }
-           }
+          const orb = rad.collectibleOrb;
+          const dist = Math.hypot(p.x - orb.x, p.y - orb.y);
+          if (dist < p.r + orb.r) {
+            rad.orbCharge = Math.min(rad.orbChargeMax, rad.orbCharge + 1);
+            playHealSound(20);
+            rad.collectibleOrb = null;
+            if (rad.orbCharge < rad.orbChargeMax) {
+              setTimeout(() => {
+                if (radianceBossRef.current.active && !radianceBossRef.current.sonicBoomActive) {
+                  radianceBossRef.current.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
+                }
+              }, 600);
+            }
+          }
         }
-        
+
         // Sonic boom ending
         if (rad.sonicBoomActive && Date.now() > rad.sonicBoomUntil) {
-           rad.sonicBoomActive = false;
-           rad.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
+          rad.sonicBoomActive = false;
+          rad.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
         }
       }
 
-      const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE" || rad.warning || rad.active;
+      // Ranked Radiance Wait Trigger - If mode is ranked, cap phase to 60s exactly
+      if (mode === "ranked" && rad.active && !rad.defeated && elapsedMs > rad.bossStartMs + 60000) {
+          rad.defeated = true; // Auto-pass
+          rad.bossDeathAnimUntil = Date.now() + 1000;
+      }
+
+      // Emit ranked wait cleanly exactly once when boss dies / phase passes
+      if (mode === "ranked" && rad.defeated && !radianceRankedFinishedRef.current) {
+         radianceRankedFinishedRef.current = true;
+         // Send off to backend that we are finished
+         socket.emit("radiance:finished", { roomId: roomIdRef.current });
+      }
+
+      // Cleanup post-defeat to resume normal gameplay
+      if (rad.defeated && rad.active && Date.now() > rad.bossDeathAnimUntil && !radianceWaiting) {
+        rad.active = false;
+        spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // Brief pause before resuming bullets
+      }
+
+      const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE" || rad.warning || rad.active || mode === "boss";
 
       let guard = 0;
       while (elapsedMs >= spawnRef.current.nextSpawnAtMs && guard < 50) {
@@ -1479,13 +1535,15 @@ export default function Game({
     }
 
     const bullets = bulletsRef.current;
-    for (let i = bullets.length - 1; i >= 0; i--) {
-      const b = bullets[i];
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
+    if (!radianceWaiting) {
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
 
-      if (b.x < -80 || b.x > w + 80 || b.y < -120 || b.y > h + 120) {
-        bullets.splice(i, 1);
+        if (b.x < -80 || b.x > w + 80 || b.y < -120 || b.y > h + 120) {
+          bullets.splice(i, 1);
+        }
       }
     }
 
@@ -1522,8 +1580,8 @@ export default function Game({
         }
         prevHpRef.current = nextHp;
 
-        // Emit HP update to server (or locally for timeTrial)
-        if (mode === "timeTrial") {
+        // Emit HP update to server (or locally for timeTrial/boss)
+        if (mode === "timeTrial" || mode === "boss") {
           if (nextHp === 0) {
             endMatch(socket.id);
           }
@@ -1550,8 +1608,8 @@ export default function Game({
 
     const invincible = isGuardActive(now) || isIFrameActive(now);
     const rad = radianceBossRef.current;
-    
-    if (!invincible) {
+
+    if (!invincible && !radianceWaiting) {
       let tookHit = false;
 
       for (let i = 0; i < bullets.length; i++) {
@@ -1596,83 +1654,83 @@ export default function Game({
       }
 
       if (!tookHit && rad.active && !rad.defeated) {
-         // homing orbs
-         for (const orb of rad.homingOrbs) {
-            if (Math.hypot(orb.x - p.x, orb.y - p.y) < p.r + orb.r - 2) {
-               tookHit = true; applyDamage(15, orb); break;
+        // homing orbs
+        for (const orb of rad.homingOrbs) {
+          if (Math.hypot(orb.x - p.x, orb.y - p.y) < p.r + orb.r - 2) {
+            tookHit = true; applyDamage(15, orb); break;
+          }
+        }
+        // wall spikes
+        if (!tookHit) {
+          for (const sp of rad.wallSpikes) {
+            if (sp.state === "EXTEND" || sp.state === "RETRACT") {
+              if (sp.isVert) {
+                if (Math.abs(p.x - sp.x) < sp.width / 2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(18, null); break; }
+              } else {
+                if (Math.abs(p.y - sp.y) < sp.width / 2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(18, null); break; }
+              }
             }
-         }
-         // wall spikes
-         if (!tookHit) {
-            for (const sp of rad.wallSpikes) {
-               if (sp.state === "EXTEND" || sp.state === "RETRACT") {
-                  if (sp.isVert) {
-                     if (Math.abs(p.x - sp.x) < sp.width/2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(18, null); break; }
-                  } else {
-                     if (Math.abs(p.y - sp.y) < sp.width/2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(18, null); break; }
-                  }
-               }
+          }
+        }
+        // lasers
+        if (!tookHit) {
+          for (const L of rad.lasers) {
+            if (L.elapsed >= L.chargeTime) {
+              const dx = p.x - L.cx;
+              const dy = p.y - L.cy;
+              const distToLine = Math.abs(dx * Math.sin(-L.angle) + dy * Math.cos(-L.angle));
+              const forwardDist = dx * Math.cos(L.angle) + dy * Math.sin(L.angle);
+              if (distToLine < L.thick / 2 + p.r - 2 && forwardDist > 0 && forwardDist < L.length) {
+                tookHit = true; applyDamage(20, null); break;
+              }
             }
-         }
-         // lasers
-         if (!tookHit) {
-            for (const L of rad.lasers) {
-               if (L.elapsed >= L.chargeTime) {
-                  const dx = p.x - L.cx;
-                  const dy = p.y - L.cy;
-                  const distToLine = Math.abs(dx * Math.sin(-L.angle) + dy * Math.cos(-L.angle));
-                  const forwardDist = dx * Math.cos(L.angle) + dy * Math.sin(L.angle);
-                  if (distToLine < L.thick/2 + p.r - 2 && forwardDist > 0 && forwardDist < L.length) {
-                     tookHit = true; applyDamage(20, null); break;
-                  }
-               }
-            }
-         }
+          }
+        }
       }
     }
-      
+
     // Update Visual Particles
     const rParticles = radParticlesRef.current;
-      for (let i = rParticles.ambient.length - 1; i >= 0; i--) {
-         const pVar = rParticles.ambient[i];
-         pVar.elapsed += dt;
-         pVar.y -= pVar.speed * dt;
-         if (pVar.elapsed >= pVar.life) rParticles.ambient.splice(i, 1);
+    for (let i = rParticles.ambient.length - 1; i >= 0; i--) {
+      const pVar = rParticles.ambient[i];
+      pVar.elapsed += dt;
+      pVar.y -= pVar.speed * dt;
+      if (pVar.elapsed >= pVar.life) rParticles.ambient.splice(i, 1);
+    }
+    for (let i = rParticles.sparks.length - 1; i >= 0; i--) {
+      const pVar = rParticles.sparks[i];
+      pVar.elapsed += dt;
+      pVar.x += pVar.vx * dt;
+      pVar.y += pVar.vy * dt;
+      pVar.vx *= 0.95; // drag
+      pVar.vy *= 0.95;
+      if (pVar.elapsed >= pVar.life) rParticles.sparks.splice(i, 1);
+    }
+    for (let i = rParticles.booms.length - 1; i >= 0; i--) {
+      const b = rParticles.booms[i];
+      if (b.delay && b.delay > 0) {
+        b.delay -= dt;
+      } else {
+        b.elapsed += dt;
+        b.r = (b.elapsed / b.life) * b.maxR;
+        if (b.elapsed >= b.life) rParticles.booms.splice(i, 1);
       }
-      for (let i = rParticles.sparks.length - 1; i >= 0; i--) {
-         const pVar = rParticles.sparks[i];
-         pVar.elapsed += dt;
-         pVar.x += pVar.vx * dt;
-         pVar.y += pVar.vy * dt;
-         pVar.vx *= 0.95; // drag
-         pVar.vy *= 0.95;
-         if (pVar.elapsed >= pVar.life) rParticles.sparks.splice(i, 1);
+    }
+
+    // Spawn Boss Ambient Particles
+    if (rad.active && !rad.defeated) {
+      if (rParticles.ambient.length < 80 && Math.random() > 0.5) {
+        rParticles.ambient.push({
+          x: w / 2 + (Math.random() - 0.5) * 600,
+          y: 120 + (Math.random() - 0.5) * 300,
+          life: 2 + Math.random() * 3,
+          elapsed: 0,
+          speed: 10 + Math.random() * 30,
+          r: 1 + Math.random() * 3,
+          opacity: 0.2 + Math.random() * 0.4
+        });
       }
-      for (let i = rParticles.booms.length - 1; i >= 0; i--) {
-         const b = rParticles.booms[i];
-         if (b.delay && b.delay > 0) {
-             b.delay -= dt;
-         } else {
-             b.elapsed += dt;
-             b.r = (b.elapsed / b.life) * b.maxR;
-             if (b.elapsed >= b.life) rParticles.booms.splice(i, 1);
-         }
-      }
-      
-      // Spawn Boss Ambient Particles
-      if (rad.active && !rad.defeated) {
-         if (rParticles.ambient.length < 80 && Math.random() > 0.5) {
-            rParticles.ambient.push({
-               x: w/2 + (Math.random()-0.5) * 600,
-               y: 120 + (Math.random()-0.5) * 300,
-               life: 2 + Math.random() * 3,
-               elapsed: 0,
-               speed: 10 + Math.random() * 30,
-               r: 1 + Math.random() * 3,
-               opacity: 0.2 + Math.random() * 0.4
-            });
-         }
-      }
+    }
 
     // POWERUP COLLECTION
     const pRef = powerupRef.current;
@@ -1694,6 +1752,20 @@ export default function Game({
           addShake(8, 200);
         }
         pRef.active = null; // consume
+      }
+    }
+
+    // Standalone Boss Win Condition
+    if (mode === "boss" && phaseRef.current === PHASE.PLAYING) {
+      let won = false;
+      // Radiance Boss victory (HP <= 0)
+      if (bossId === "boss_radiance" && rad.defeated) won = true;
+      // Base Boss victory (Expires naturally)
+      if (bossId === "boss_base" && bossRef.current && bossRef.current.state === "DONE") won = true;
+
+      if (won) {
+        setWinnerId(myId);
+        endMatch(myId);
       }
     }
 
@@ -1837,208 +1909,208 @@ export default function Game({
     }
 
     if (rad.warning) {
-       ctx.fillStyle = "rgba(255, 230, 100, 0.15)";
-       ctx.fillRect(0, 0, w, h);
-       const flash = Math.floor(now / 150) % 2 === 0;
-       if (flash) {
-         ctx.fillStyle = "white";
-         ctx.font = "900 64px monospace";
-         ctx.textAlign = "center";
-         ctx.textBaseline = "middle";
-         ctx.shadowColor = "gold";
-         ctx.shadowBlur = 20;
-         ctx.fillText("DIVINE PRESENCE", w / 2, h / 2 - 40);
-         ctx.fillStyle = "gold";
-         ctx.font = "900 48px monospace";
-         ctx.fillText("APPROACHING", w / 2, h / 2 + 30);
-         ctx.shadowBlur = 0;
-       }
+      ctx.fillStyle = "rgba(255, 230, 100, 0.15)";
+      ctx.fillRect(0, 0, w, h);
+      const flash = Math.floor(now / 150) % 2 === 0;
+      if (flash) {
+        ctx.fillStyle = "white";
+        ctx.font = "900 64px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.shadowColor = "gold";
+        ctx.shadowBlur = 20;
+        ctx.fillText("DIVINE PRESENCE", w / 2, h / 2 - 40);
+        ctx.fillStyle = "gold";
+        ctx.font = "900 48px monospace";
+        ctx.fillText("APPROACHING", w / 2, h / 2 + 30);
+        ctx.shadowBlur = 0;
+      }
     }
 
     if (rad.active) {
-       // Arena Glow
-       ctx.fillStyle = rad.defeated ? "rgba(255, 255, 255, 0.3)" : "rgba(255, 240, 180, 0.05)";
-       ctx.fillRect(0, 0, w, h);
+      // Arena Glow
+      ctx.fillStyle = rad.defeated ? "rgba(255, 255, 255, 0.3)" : "rgba(255, 240, 180, 0.05)";
+      ctx.fillRect(0, 0, w, h);
 
-       const bx = w / 2;
-       const by = 120 + Math.sin(now / 500) * 15;
-       
-       // Draw Boss Entity
-       if (!rad.defeated) {
-          ctx.save();
-          ctx.translate(bx, by);
-          
-          // Outer Halo
-          ctx.shadowColor = "gold";
-          ctx.shadowBlur = 40;
-          ctx.fillStyle = "rgba(255, 255, 200, 0.2)";
+      const bx = w / 2;
+      const by = 120 + Math.sin(now / 500) * 15;
+
+      // Draw Boss Entity
+      if (!rad.defeated) {
+        ctx.save();
+        ctx.translate(bx, by);
+
+        // Outer Halo
+        ctx.shadowColor = "gold";
+        ctx.shadowBlur = 40;
+        ctx.fillStyle = "rgba(255, 255, 200, 0.2)";
+        ctx.beginPath();
+        ctx.arc(0, 0, 100 + Math.sin(now / 200) * 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rotating Aura Ring
+        ctx.rotate(now / 1500);
+        ctx.strokeStyle = "rgba(255, 215, 0, 0.5)";
+        ctx.lineWidth = 4;
+        for (let i = 0; i < 8; i++) {
           ctx.beginPath();
-          ctx.arc(0, 0, 100 + Math.sin(now/200)*10, 0, Math.PI*2);
+          ctx.moveTo(80, 0);
+          ctx.lineTo(110, 0);
+          ctx.stroke();
+          ctx.rotate((Math.PI * 2) / 8);
+        }
+
+        ctx.rotate(-now / 1500 * 2); // reverse core rotation
+        // Crown / Sun Spikes
+        ctx.fillStyle = "white";
+        for (let i = 0; i < 12; i++) {
+          ctx.beginPath();
+          ctx.moveTo(30, 0);
+          ctx.lineTo(15, 15);
+          ctx.lineTo(80 + Math.sin(now / 150 + i) * 15, 0);
+          ctx.lineTo(15, -15);
           ctx.fill();
+          ctx.rotate((Math.PI * 2) / 12);
+        }
 
-          // Rotating Aura Ring
-          ctx.rotate(now / 1500);
-          ctx.strokeStyle = "rgba(255, 215, 0, 0.5)";
-          ctx.lineWidth = 4;
-          for (let i = 0; i < 8; i++) {
-             ctx.beginPath();
-             ctx.moveTo(80, 0);
-             ctx.lineTo(110, 0);
-             ctx.stroke();
-             ctx.rotate((Math.PI * 2) / 8);
-          }
-          
-          ctx.rotate(-now / 1500 * 2); // reverse core rotation
-          // Crown / Sun Spikes
-          ctx.fillStyle = "white";
-          for (let i = 0; i < 12; i++) {
-             ctx.beginPath();
-             ctx.moveTo(30, 0);
-             ctx.lineTo(15, 15);
-             ctx.lineTo(80 + Math.sin(now/150 + i)*15, 0);
-             ctx.lineTo(15, -15);
-             ctx.fill();
-             ctx.rotate((Math.PI * 2) / 12);
-          }
+        // Core Body
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "white";
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(0, 0, 35, 0, Math.PI * 2);
+        ctx.fill();
 
-          // Core Body
-          ctx.shadowBlur = 20;
+        // Inner Eye
+        ctx.fillStyle = "rgba(255, 200, 0, 0.8)";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 10, 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(0, 0, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+
+        // Boss HUD
+        ctx.fillStyle = "gold";
+        ctx.font = "bold 20px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText("RADIANCE", w / 2, 30);
+
+        // Boss HP Bar
+        ctx.fillStyle = "rgba(50, 0, 0, 0.5)";
+        ctx.fillRect(w / 2 - 150, 45, 300, 15);
+        ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
+        const hpRatio = rad.hp / 100;
+        ctx.fillRect(w / 2 - 150, 45, 300 * hpRatio, 15);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(w / 2 - 150, 45, 300, 15);
+
+        // Orb Charge UI
+        if (!rad.sonicBoomActive) {
+          const chargeText = rad.orbCharge >= rad.orbChargeMax ? "PRESS R - SONIC BOOM READY" : `CHARGE: ${rad.orbCharge} / ${rad.orbChargeMax}`;
+          ctx.fillStyle = rad.orbCharge >= rad.orbChargeMax ? "white" : "gold";
+          ctx.font = rad.orbCharge >= rad.orbChargeMax ? "bold 24px monospace" : "18px monospace";
+          ctx.shadowColor = "gold";
+          ctx.shadowBlur = rad.orbCharge >= rad.orbChargeMax ? 15 : 0;
+          if (rad.orbCharge >= rad.orbChargeMax && Math.floor(now / 100) % 2 === 0) {
+            ctx.shadowBlur = 25;
+            ctx.fillStyle = "rgba(255, 255, 200, 1)";
+          }
+          ctx.fillText(chargeText, w / 2, h - 30);
+          ctx.shadowBlur = 0;
+        }
+      }
+
+      // Radiance Particles
+      const rPart = radParticlesRef.current;
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      for (const pVar of rPart.ambient) {
+        ctx.fillStyle = `rgba(255, 240, 150, ${pVar.opacity})`;
+        ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI * 2); ctx.fill();
+      }
+      for (const pVar of rPart.sparks) {
+        ctx.fillStyle = pVar.color;
+        ctx.shadowColor = pVar.color;
+        ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI * 2); ctx.fill();
+      }
+      for (const b of rPart.booms) {
+        if (!b.delay || b.delay <= 0) {
+          ctx.strokeStyle = `rgba(255, 255, 255, ${1 - b.elapsed / b.life})`;
+          ctx.lineWidth = 15 * (1 - b.elapsed / b.life);
           ctx.shadowColor = "white";
-          ctx.fillStyle = "white";
-          ctx.beginPath();
-          ctx.arc(0, 0, 35, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.shadowBlur = 20;
+          ctx.beginPath(); ctx.arc(bx, by, b.r, 0, Math.PI * 2); ctx.stroke();
+        }
+      }
+      ctx.restore();
 
-          // Inner Eye
-          ctx.fillStyle = "rgba(255, 200, 0, 0.8)";
-          ctx.beginPath();
-          ctx.ellipse(0, 0, 10, 20, 0, 0, Math.PI * 2);
-          ctx.fill();
-          
-          ctx.fillStyle = "white";
-          ctx.beginPath();
-          ctx.arc(0, 0, 4, 0, Math.PI * 2);
-          ctx.fill();
+      // Draw Attacks
+      for (const orb of rad.homingOrbs) {
+        ctx.shadowColor = "gold";
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = "white";
+        ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "gold"; ctx.lineWidth = 3; ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
 
+      for (const sp of rad.wallSpikes) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.shadowColor = "gold"; ctx.shadowBlur = 15;
+        if (sp.isVert) {
+          if (sp.state === "WARN") {
+            ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+            ctx.fillRect(sp.x - sp.width / 2, 0, sp.width, h);
+          } else {
+            ctx.fillRect(sp.x - sp.width / 2, 0, sp.width, sp.length);
+          }
+        } else {
+          if (sp.state === "WARN") {
+            ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+            ctx.fillRect(0, sp.y - sp.width / 2, w, sp.width);
+          } else {
+            ctx.fillRect(0, sp.y - sp.width / 2, sp.length, sp.width);
+          }
+        }
+        ctx.shadowBlur = 0;
+      }
+
+      for (const L of rad.lasers) {
+        if (L.elapsed < L.chargeTime) {
+          ctx.fillStyle = "rgba(255, 215, 0, 0.2)";
+          ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(L.angle);
+          ctx.fillRect(0, -L.thick / 2, L.length, L.thick);
           ctx.restore();
-          
-          // Boss HUD
-          ctx.fillStyle = "gold";
-          ctx.font = "bold 20px monospace";
-          ctx.textAlign = "center";
-          ctx.fillText("RADIANCE", w / 2, 30);
-          
-          // Boss HP Bar
-          ctx.fillStyle = "rgba(50, 0, 0, 0.5)";
-          ctx.fillRect(w/2 - 150, 45, 300, 15);
-          ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
-          const hpRatio = rad.hp / 100;
-          ctx.fillRect(w/2 - 150, 45, 300 * hpRatio, 15);
-          ctx.strokeStyle = "white";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(w/2 - 150, 45, 300, 15);
-          
-          // Orb Charge UI
-          if (!rad.sonicBoomActive) {
-             const chargeText = rad.orbCharge >= rad.orbChargeMax ? "PRESS R - SONIC BOOM READY" : `CHARGE: ${rad.orbCharge} / ${rad.orbChargeMax}`;
-             ctx.fillStyle = rad.orbCharge >= rad.orbChargeMax ? "white" : "gold";
-             ctx.font = rad.orbCharge >= rad.orbChargeMax ? "bold 24px monospace" : "18px monospace";
-             ctx.shadowColor = "gold";
-             ctx.shadowBlur = rad.orbCharge >= rad.orbChargeMax ? 15 : 0;
-             if (rad.orbCharge >= rad.orbChargeMax && Math.floor(now/100)%2===0) {
-                 ctx.shadowBlur = 25;
-                 ctx.fillStyle = "rgba(255, 255, 200, 1)";
-             }
-             ctx.fillText(chargeText, w / 2, h - 30);
-             ctx.shadowBlur = 0;
-          }
-       }
-
-       // Radiance Particles
-       const rPart = radParticlesRef.current;
-       ctx.save();
-       ctx.globalCompositeOperation = "screen";
-       for (const pVar of rPart.ambient) {
-          ctx.fillStyle = `rgba(255, 240, 150, ${pVar.opacity})`;
-          ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI*2); ctx.fill();
-       }
-       for (const pVar of rPart.sparks) {
-          ctx.fillStyle = pVar.color;
-          ctx.shadowColor = pVar.color;
-          ctx.shadowBlur = 10;
-          ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI*2); ctx.fill();
-       }
-       for (const b of rPart.booms) {
-          if (!b.delay || b.delay <= 0) {
-              ctx.strokeStyle = `rgba(255, 255, 255, ${1 - b.elapsed/b.life})`;
-              ctx.lineWidth = 15 * (1 - b.elapsed/b.life);
-              ctx.shadowColor = "white";
-              ctx.shadowBlur = 20;
-              ctx.beginPath(); ctx.arc(bx, by, b.r, 0, Math.PI*2); ctx.stroke();
-          }
-       }
-       ctx.restore();
-
-       // Draw Attacks
-       for (const orb of rad.homingOrbs) {
-          ctx.shadowColor = "gold";
-          ctx.shadowBlur = 15;
-          ctx.fillStyle = "white";
-          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI*2); ctx.fill();
-          ctx.strokeStyle = "gold"; ctx.lineWidth = 3; ctx.stroke();
+        } else {
+          const activeRatio = (L.elapsed - L.chargeTime) / L.activeTime;
+          const fade = 1 - activeRatio;
+          ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+          ctx.shadowColor = "gold"; ctx.shadowBlur = 25;
+          ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(L.angle);
+          const th = L.thick * (1 - activeRatio * 0.3);
+          ctx.fillRect(0, -th / 2, L.length, th);
+          ctx.restore();
           ctx.shadowBlur = 0;
-       }
+        }
+      }
 
-       for (const sp of rad.wallSpikes) {
-          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-          ctx.shadowColor = "gold"; ctx.shadowBlur = 15;
-          if (sp.isVert) {
-             if (sp.state === "WARN") {
-                ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
-                ctx.fillRect(sp.x - sp.width/2, 0, sp.width, h);
-             } else {
-                ctx.fillRect(sp.x - sp.width/2, 0, sp.width, sp.length);
-             }
-          } else {
-             if (sp.state === "WARN") {
-                ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
-                ctx.fillRect(0, sp.y - sp.width/2, w, sp.width);
-             } else {
-                ctx.fillRect(0, sp.y - sp.width/2, sp.length, sp.width);
-             }
-          }
-          ctx.shadowBlur = 0;
-       }
-
-       for (const L of rad.lasers) {
-          if (L.elapsed < L.chargeTime) {
-             ctx.fillStyle = "rgba(255, 215, 0, 0.2)";
-             ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(L.angle);
-             ctx.fillRect(0, -L.thick/2, L.length, L.thick);
-             ctx.restore();
-          } else {
-             const activeRatio = (L.elapsed - L.chargeTime) / L.activeTime;
-             const fade = 1 - activeRatio;
-             ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
-             ctx.shadowColor = "gold"; ctx.shadowBlur = 25;
-             ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(L.angle);
-             const th = L.thick * (1 - activeRatio * 0.3);
-             ctx.fillRect(0, -th/2, L.length, th);
-             ctx.restore();
-             ctx.shadowBlur = 0;
-          }
-       }
-
-       // Collectible Radiant Orbs
-       if (rad.collectibleOrb && !rad.sonicBoomActive) {
-          const orb = rad.collectibleOrb;
-          ctx.shadowColor = "white"; ctx.shadowBlur = 15;
-          ctx.fillStyle = "gold";
-          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r + Math.sin(now/100)*2, 0, Math.PI*2); ctx.fill();
-          ctx.fillStyle = "white";
-          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r*0.4, 0, Math.PI*2); ctx.fill();
-          ctx.shadowBlur = 0;
-       }
+      // Collectible Radiant Orbs
+      if (rad.collectibleOrb && !rad.sonicBoomActive) {
+        const orb = rad.collectibleOrb;
+        ctx.shadowColor = "white"; ctx.shadowBlur = 15;
+        ctx.fillStyle = "gold";
+        ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r + Math.sin(now / 100) * 2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "white";
+        ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r * 0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+      }
     }
 
     // Draw Powerup
@@ -2158,6 +2230,36 @@ export default function Game({
     }
 
     ctx.restore();
+
+    // Ranked Match - Waiting for Opponent Overlay
+    if (radianceWaiting) {
+      ctx.fillStyle = "rgba(0,0,0,0.85)";
+      ctx.fillRect(0, 0, w, h);
+
+      // ASCENSION GLOW
+      ctx.fillStyle = `rgba(255, 230, 180, ${0.15 + 0.1 * Math.sin(nowMs / 800)})`;
+      ctx.fillRect(0, 0, w, h);
+      
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      
+      ctx.shadowColor = "gold";
+      ctx.shadowBlur = 30;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.font = "900 52px monospace";
+      ctx.fillText("RADIANCE DEFEATED", w / 2, h / 2 - 30);
+      
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = "rgba(200, 200, 200, 0.8)";
+      ctx.font = "600 24px monospace";
+      ctx.fillText("WAITING FOR OPPONENT", w / 2, h / 2 + 40);
+
+      const dots = ".".repeat((Math.floor(nowMs / 400) % 4));
+      ctx.textAlign = "left";
+      ctx.fillText(dots, w / 2 + 150, h / 2 + 40);
+      
+      ctx.shadowBlur = 0;
+    }
 
     if (phaseRef.current === PHASE.PLAYING) {
       rafRef.current = requestAnimationFrame(loop);
@@ -2469,8 +2571,8 @@ export default function Game({
 
                     {timeTrialSubmissionStatus && (
                       <div className={`mt-3 text-sm font-mono ${timeTrialSubmissionStatus === "success" ? "text-green-400" :
-                          timeTrialSubmissionStatus === "error" ? "text-red-400" :
-                            "text-white/80"
+                        timeTrialSubmissionStatus === "error" ? "text-red-400" :
+                          "text-white/80"
                         }`}>
                         {timeTrialSubmissionMsg}
                       </div>

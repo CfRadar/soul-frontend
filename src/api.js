@@ -177,3 +177,42 @@ export async function submitTimeTrial(timeMs) {
   });
 }
 
+/* -----------------------------
+   BOSSES
+----------------------------- */
+export async function getBossUnlocks(token) {
+  const res = await fetch(`${API_URL}/bosses/unlocks`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  
+  const contentType = res.headers.get("content-type");
+  const isJson = contentType && contentType.includes("application/json");
+  if (!isJson) return { ok: false, error: "bad_response", status: res.status };
+  
+  try {
+    return await res.json();
+  } catch {
+    return { ok: false, error: "bad_response", status: res.status };
+  }
+}
+
+export async function unlockBoss(token, bossId) {
+  const res = await fetch(`${API_URL}/bosses/unlock`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ bossId }),
+  });
+  
+  const contentType = res.headers.get("content-type");
+  const isJson = contentType && contentType.includes("application/json");
+  if (!isJson) return { ok: false, error: "bad_response", status: res.status };
+  
+  try {
+    return await res.json();
+  } catch {
+    return { ok: false, error: "bad_response", status: res.status };
+  }
+}

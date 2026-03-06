@@ -310,7 +310,9 @@ export default function Game({
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
       osc.connect(gain); gain.connect(ctx.destination);
       osc.start(); osc.stop(ctx.currentTime + 1.2);
-    } catch {}
+    } catch (err) {
+      console.warn("audio error", err);
+    }
   }
 
   function playLaserChargeSound() {
@@ -326,7 +328,9 @@ export default function Game({
       gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.6);
       osc.connect(gain); gain.connect(ctx.destination);
       osc.start(); osc.stop(ctx.currentTime + 0.6);
-    } catch {}
+    } catch (err) {
+      console.warn("audio error", err);
+    }
   }
 
   function playLaserFireSound() {
@@ -342,7 +346,9 @@ export default function Game({
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
       osc.connect(gain); gain.connect(ctx.destination);
       osc.start(); osc.stop(ctx.currentTime + 0.4);
-    } catch {}
+    } catch (err) {
+      console.warn("audio error", err);
+    }
   }
 
   function unlockAudio() {
@@ -1030,7 +1036,6 @@ export default function Game({
         if (!isBossTime) {
           spawnBullets(w, h, difficulty);
         }
-        const rand = rngRef.current;
         // Scale gap: starts at 800ms, decreases to 500ms at max difficulty (slower decrease)
         let gap = 800 - difficulty * 300;
         gap = Math.max(350, gap);
@@ -1207,7 +1212,7 @@ export default function Game({
        ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
        ctx.fillRect(0, 0, w, h);
        
-       const flash = Math.floor(Date.now() / 150) % 2 === 0;
+       const flash = Math.floor(now / 150) % 2 === 0;
        if (flash) {
          ctx.fillStyle = "white";
          ctx.font = "900 64px monospace";
@@ -1240,7 +1245,7 @@ export default function Game({
        ctx.arc(bx + 12, by - 5, 8, 0, Math.PI * 2);
        ctx.fill();
        
-       if (Math.random() > 0.95) {
+       if (rngRef.current() > 0.95) {
           ctx.fillStyle = "red";
           ctx.beginPath();
           ctx.arc(bx - 12, by - 5, 3, 0, Math.PI*2);

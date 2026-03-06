@@ -140,7 +140,14 @@ function getOpponentName(me, matchInfo) {
 
 // ========== HeaderBar Component (Internal) ==========
 // Clean top HUD bar above canvas - shown during COUNTDOWN + PLAYING
-function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase, guardStatus, corruptHealRem }) {
+function HeaderBar({ 
+  myName, oppName, 
+  hp, enemyHp, 
+  timerText, 
+  hpHitPulse, enemyHitFlash, enemyHpPulse, enemyHealFlash,
+  phase, guardStatus, corruptHealRem,
+  isCompetitive
+}) {
   const showBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
 
   if (!showBar) return null;
@@ -167,21 +174,36 @@ function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase, guardSta
         </span>
       </div>
 
-      {/* Right: HP + Guard - w-[38%] flex justify-end */}
-      <div className="w-[38%] flex justify-end items-center gap-3">
-        {isCorruptActive && (
-          <div className="text-xs font-bold text-purple-400 font-mono bg-purple-900/40 px-2 py-1 rounded animate-pulse">
-            REVERSE: {corruptHealRem.toFixed(1)}s
+      {/* Right: HP + Guard - w-[38%] flex justify-end gap-6 */}
+      <div className="w-[38%] flex justify-end items-center gap-6">
+        {/* Opponent HP Display (Competitive) */}
+        {isCompetitive && oppName && (
+          <div className="flex flex-col items-end opacity-80">
+            <div className="text-[10px] text-white/50 mb-[-4px]">OPP HP</div>
+            <div className={`font-mono text-2xl tabular-nums transition-all duration-150 ${enemyHitFlash ? 'text-red-400 scale-110' : enemyHealFlash ? 'text-lime-300 scale-110' : 'text-gray-300'}`}>
+              {enemyHpPulse ? '...' : enemyHp}
+            </div>
           </div>
         )}
-        <div className="flex items-center">
-          <span className={`font-mono text-3xl tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
-            {hp}
-          </span>
-          <span className="ml-1 text-xs text-white/50 font-mono">HP</span>
-        </div>
-        <div className="text-xs text-white/70 font-mono bg-white/10 px-2 py-1 rounded">
-          GUARD: <span className={guardStatus === "READY" ? "text-lime-400" : "text-white/60"}>{guardStatus}</span>
+
+        {/* My HP Display */}
+        <div className="flex items-center gap-2 border-l border-white/20 pl-4">
+          <div className="flex flex-col items-center">
+            {isCorruptActive && (
+              <div className="text-[10px] font-bold text-purple-400 font-mono bg-purple-900/40 px-1 rounded animate-pulse absolute -top-4">
+                REV: {corruptHealRem.toFixed(1)}s
+              </div>
+            )}
+            <div className="flex items-center">
+              <span className={`font-mono text-3xl tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
+                {hp}
+              </span>
+              <span className="ml-1 text-xs text-white/50 font-mono">HP</span>
+            </div>
+          </div>
+          <div className="text-xs text-white/70 font-mono bg-white/10 px-2 py-1 rounded hidden sm:block">
+            GUARD: <span className={guardStatus === "READY" ? "text-lime-400" : "text-white/60"}>{guardStatus}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -244,8 +266,15 @@ export default function Game({
 
   const [hp, setHp] = useState(100);
   const [enemyHp, setEnemyHp] = useState(100);
+  
   const [hitFlash, setHitFlash] = useState(false);
   const [hpPulse, setHpPulse] = useState(false);
+  
+  const [enemyHitFlash, setEnemyHitFlash] = useState(false);
+  const [enemyHpPulse, setEnemyHpPulse] = useState(false);
+  const [enemyHealFlash, setEnemyHealFlash] = useState(false);
+  const prevEnemyHpRef = useRef(100);
+
   const [surviveStart, setSurviveStart] = useState(0);
   const [endAt, setEndAt] = useState(null); // Frozen end timestamp (freezes timer)
   const [nowMs, setNowMs] = useState(Date.now());
@@ -728,17 +757,41 @@ export default function Game({
       }
     });
 
-    socket.on("hpUpdate", (data) => {
+    socket.on("game:hpInit", ({ hpMap }) => {
       try {
-        console.log("[hpUpdate]", data);
-        const { targetSocketId, hp: newHp } = data;
-
-        // Update enemy HP if this is the enemy
-        if (targetSocketId === enemySocketId) {
-          setEnemyHp(newHp);
+        console.log("[game:hpInit]", hpMap);
+        if (enemySocketId && hpMap[enemySocketId] !== undefined) {
+           setEnemyHp(hpMap[enemySocketId]);
+           prevEnemyHpRef.current = hpMap[enemySocketId];
         }
       } catch (err) {
-        console.error("[hpUpdate] error:", err);
+        console.error("[game:hpInit] error:", err);
+      }
+    });
+
+    socket.on("game:hpSync", (data) => {
+      try {
+        console.log("[game:hpSync]", data);
+        const { socketId, hp: newHp } = data;
+
+        // Update enemy HP if this is the enemy
+        if (socketId === enemySocketId) {
+          if (newHp < prevEnemyHpRef.current) {
+            setEnemyHitFlash(true);
+            setEnemyHpPulse(true);
+            setTimeout(() => setEnemyHitFlash(false), 150);
+            setTimeout(() => setEnemyHpPulse(false), 500);
+          } else if (newHp > prevEnemyHpRef.current) {
+            setEnemyHealFlash(true);
+            setEnemyHpPulse(true);
+            setTimeout(() => setEnemyHealFlash(false), 150);
+            setTimeout(() => setEnemyHpPulse(false), 500);
+          }
+          setEnemyHp(newHp);
+          prevEnemyHpRef.current = newHp;
+        }
+      } catch (err) {
+        console.error("[game:hpSync] error:", err);
       }
     });
 
@@ -836,12 +889,21 @@ export default function Game({
       socket.off("server:hello");
       socket.off("matchFound");
       socket.off("game:start");
-      socket.off("hpUpdate");
+      socket.off("game:hpInit");
+      socket.off("game:hpSync");
       socket.off("game:matchOver");
       socket.off("radiance:wait");
       socket.off("radiance:resumeNormal");
     };
   }, [enemySocketId]);
+
+  // --- Broadcast local HP changes to opponent ---
+  useEffect(() => {
+    const isCompetitive = mode === "ranked" || mode === "friend";
+    if (isCompetitive && roomIdRef.current && phase === PHASE.PLAYING) {
+      socket.emit("game:hpUpdate", { roomId: roomIdRef.current, hp, maxHp: maxHpRef.current });
+    }
+  }, [hp, phase, mode]);
 
   // --- Time Trial / Boss immediate start ---
   useEffect(() => {
@@ -2365,11 +2427,16 @@ export default function Game({
             myName={myName}
             oppName={opponentName}
             hp={hp}
+            enemyHp={enemyHp}
             timerText={timerText}
             hpHitPulse={hpPulse}
+            enemyHitFlash={enemyHitFlash}
+            enemyHpPulse={enemyHpPulse}
+            enemyHealFlash={enemyHealFlash}
             phase={phase}
             guardStatus={guardStatus}
             corruptHealRem={Math.max(0, (corruptHealUntilRef.current - nowMs) / 1000)}
+            isCompetitive={vsMode === "ranked" || vsMode === "friend"}
           />
 
           {/* Menu Phase: Top HUD */}

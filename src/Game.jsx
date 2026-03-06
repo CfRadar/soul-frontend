@@ -238,7 +238,23 @@ export default function Game({
   const corruptHealUntilRef = useRef(0); // When corrupt heal expires
 
   // Track if a boss unlock event was fired to prevent API spam
-  const bossUnlockFiredRef = useRef({ boss_base: false, boss_radiance: false });
+  const bossUnlockFiredRef = useRef({
+    boss_base: false,
+    boss_radiance: false
+  });
+
+  // ========== LASER ROUND STATE ==========
+  const laserRoundRef = useRef({
+    triggered: false,
+    warning: false,
+    active: false,
+    finished: false,
+    warningStartMs: 0,
+    startMs: 0,
+    endMs: 0,
+    nextWaveAtMs: 0,
+    lasers: []
+  });
 
   // Track previous HP for hit animation
   const prevHpRef = useRef(100);
@@ -1028,6 +1044,17 @@ export default function Game({
       sparks: [],
       booms: []
     };
+    laserRoundRef.current = {
+      triggered: false,
+      warning: false,
+      active: false,
+      finished: false,
+      warningStartMs: 0,
+      startMs: 0,
+      endMs: 0,
+      nextWaveAtMs: 0,
+      lasers: []
+    };
 
     const c = canvasRef.current;
     const w = c?.width || 900;
@@ -1057,7 +1084,14 @@ export default function Game({
     loop._lastNow = undefined;
 
     cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(loop);
+    if (!document.hidden) {
+      rafRef.current = requestAnimationFrame(loop);
+    } else {
+      // Force it to start ticking if match begins while alt-tabbed
+      if (!window.bgTicker) {
+        window.bgTicker = setInterval(loop, 100);
+      }
+    }
   }
 
   function endMatch(wid) {
@@ -1143,6 +1177,38 @@ export default function Game({
       setTimeTrialSubmissionMsg("Error: " + String(e.message || e));
     }
   }
+
+  // Handle visibility return for smooth dt catching and background simulation
+  useEffect(() => {
+    const handleVisChange = () => {
+      if (!document.hidden) {
+        // Returning to focus
+        if (window.bgTicker) {
+          clearInterval(window.bgTicker);
+          window.bgTicker = null;
+        }
+        loop._lastNow = Date.now();
+        if (phaseRef.current === PHASE.PLAYING) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = requestAnimationFrame(loop);
+        }
+      } else {
+        // Going to background
+        cancelAnimationFrame(rafRef.current);
+        if (!window.bgTicker && phaseRef.current === PHASE.PLAYING) {
+          window.bgTicker = setInterval(loop, 100); // 10 FPS logic in background
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisChange);
+      if (window.bgTicker) {
+        clearInterval(window.bgTicker);
+        window.bgTicker = null;
+      }
+    };
+  }, []);
 
   // --- game loop ---
   function spawnBullets(w, h, difficulty = 0) {
@@ -1264,6 +1330,7 @@ export default function Game({
           chargeTime: 0.8,
           activeTime: 0.3,
           elapsed: 0,
+          spawnedAtMs: elapsedMs,
           thick: 90,
         });
         playLaserChargeSound();
@@ -1286,8 +1353,8 @@ export default function Game({
       } else if (attackType === 3) {
         const shiftX = (rand() - 0.5) * 100;
         const shiftY = (rand() - 0.5) * 100;
-        boss.lasers.push({ x: p.x + shiftX, y: h / 2, isHoriz: false, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
-        boss.lasers.push({ x: w / 2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
+        boss.lasers.push({ x: p.x + shiftX, y: h / 2, isHoriz: false, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, spawnedAtMs: elapsedMs, thick: 60 });
+        boss.lasers.push({ x: w / 2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, spawnedAtMs: elapsedMs, thick: 60 });
         playLaserChargeSound();
       }
 
@@ -1312,15 +1379,17 @@ export default function Game({
 
     for (let i = boss.lasers.length - 1; i >= 0; i--) {
       const L = boss.lasers[i];
-      const wasCharging = L.elapsed < L.chargeTime;
-      L.elapsed += dt;
-      const isCharging = L.elapsed < L.chargeTime;
+      const prevElapsed = L.elapsed;
+      const curElapsed = (elapsedMs - L.spawnedAtMs) / 1000;
+      L.elapsed = curElapsed;
+      const wasCharging = prevElapsed < L.chargeTime;
+      const isCharging = curElapsed < L.chargeTime;
 
       if (wasCharging && !isCharging) {
         playLaserFireSound();
         addShake(18, 200);
       }
-      if (L.elapsed >= L.chargeTime + L.activeTime) {
+      if (curElapsed >= L.chargeTime + L.activeTime) {
         boss.lasers.splice(i, 1);
       }
     }
@@ -1336,7 +1405,7 @@ export default function Game({
 
     const now = Date.now();
     const prevNow = loop._lastNow ?? now;
-    const dt = Math.min(0.03, (now - prevNow) / 1000);
+    const dt = Math.min(0.05, (now - prevNow) / 1000);
     loop._lastNow = now;
 
     const keys = keysRef.current;
@@ -1442,16 +1511,16 @@ export default function Game({
             // spikes at walls
             const isVert = rngRef.current() > 0.5;
             if (isVert) {
-              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
-              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
+              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
             } else {
-              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
-              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
+              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
             }
           } else if (attackType === 2) {
             // rotating lasers
-            rad.lasers.push({ cx: w / 2, cy: 120, angle: 0, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
-            rad.lasers.push({ cx: w / 2, cy: 120, angle: Math.PI, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
+            rad.lasers.push({ cx: w / 2, cy: 120, angle: 0, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0, spawnedAtMs: elapsedMs });
+            rad.lasers.push({ cx: w / 2, cy: 120, angle: Math.PI, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0, spawnedAtMs: elapsedMs });
             playLaserChargeSound();
           }
           rad.nextAttackAtMs = elapsedMs + 3500 + rngRef.current() * 1500;
@@ -1478,10 +1547,11 @@ export default function Game({
 
         for (let i = rad.wallSpikes.length - 1; i >= 0; i--) {
           const sp = rad.wallSpikes[i];
-          sp.timer += dt;
-          if (sp.state === "WARN" && sp.timer > 1.0) {
+          const curElapsed = (elapsedMs - sp.spawnedAtMs) / 1000;
+          sp.timer = curElapsed;
+          
+          if (sp.state === "WARN" && curElapsed > 1.0) {
             sp.state = "EXTEND";
-            sp.timer = 0;
           } else if (sp.state === "EXTEND") {
             sp.length += 800 * dt;
             if (sp.length >= sp.maxLength) { sp.length = sp.maxLength; sp.state = "RETRACT"; }
@@ -1493,15 +1563,20 @@ export default function Game({
 
         for (let i = rad.lasers.length - 1; i >= 0; i--) {
           const L = rad.lasers[i];
-          const wasCharging = L.elapsed < L.chargeTime;
-          L.elapsed += dt;
-          if (wasCharging && L.elapsed >= L.chargeTime) {
+          const prevElapsed = L.elapsed;
+          const curElapsed = (elapsedMs - L.spawnedAtMs) / 1000;
+          L.elapsed = curElapsed;
+          
+          const wasCharging = prevElapsed < L.chargeTime;
+          const isCharging = curElapsed < L.chargeTime;
+          
+          if (wasCharging && !isCharging) {
             playLaserFireSound();
             addShake(12, 200);
           }
-          if (L.elapsed >= L.chargeTime + L.activeTime) {
+          if (curElapsed >= L.chargeTime + L.activeTime) {
             rad.lasers.splice(i, 1);
-          } else if (L.elapsed >= L.chargeTime) {
+          } else if (!isCharging) {
             L.angle += L.rotSpeed * dt;
           }
         }
@@ -1547,14 +1622,138 @@ export default function Game({
       // Cleanup post-defeat to resume normal gameplay
       if (rad.defeated && rad.active && Date.now() > rad.bossDeathAnimUntil && !radianceWaiting) {
         rad.active = false;
+        // Calculate the exact amount of time the Radiance fight officially took up to subtract from universal playtime
+        rad.bossPauseTotal = (elapsedMs - rad.bossPauseStart);
         spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // Brief pause before resuming bullets
       }
 
+      // ========== GLOBAL LASER ROUND EVENT (Exactly at 120s of true gameplay time) ==========
+      // Calculate true gameplay elapsedMs by subtracting any time paused by the Radiance boss
+      let lrElapsedMs = elapsedMs;
+      if (rad.triggered) {
+        if (!rad.defeated) {
+          // If Radiance is currently active, freeze LR time at the moment Radiance started
+          lrElapsedMs = rad.bossPauseStart;
+        } else {
+          // If Radiance is defeated, subtract the total time paused from the current elapsedMs
+          lrElapsedMs = Math.max(0, elapsedMs - rad.bossPauseTotal);
+        }
+      }
+
+      const lr = laserRoundRef.current;
+      if (!lr.triggered && lrElapsedMs >= 120000 && !lr.finished) {
+        lr.triggered = true;
+        lr.warning = true;
+        // Lock in the warning start time based on true elapsed gameplay
+        lr.warningStartMs = lrElapsedMs;
+        
+        // Clear all bullets cleanly before the event
+        bulletsRef.current = [];
+        
+        addShake(25, 3000);
+        playBossWarningSound();
+      } else if (lr.warning && lrElapsedMs >= lr.warningStartMs + 3000) {
+        // Warning ends -> Start shooting lasers
+        lr.warning = false;
+        lr.active = true;
+        lr.startMs = lrElapsedMs;
+        lr.endMs = lrElapsedMs + 30000;
+        lr.nextWaveAtMs = lrElapsedMs + 500;
+      }
+
+      // Laser Round Execution
+      if (lr.active) {
+        // End condition
+        if (lrElapsedMs >= lr.endMs) {
+          lr.active = false;
+          lr.finished = true;
+          lr.lasers = [];
+          spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // grace period before resuming normal bullets
+        } else {
+          // Generate Lasers
+          if (lrElapsedMs >= lr.nextWaveAtMs) {
+            // Include diagonal types (0 to 5 for 6 variations)
+            const type = Math.floor(rngRef.current() * 6);
+            
+            // Rapid charge configs for 4 clustered lasers
+            const baseConfig = { chargeTime: 0.6, activeTime: 0.25, thick: 45, elapsed: 0, spawnedAtMs: lrElapsedMs };
+            
+            if (type === 0) {
+              // 4 Horizontal
+              lr.lasers.push({ x: w / 2, y: h * 0.2, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w / 2, y: h * 0.4, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w / 2, y: h * 0.6, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w / 2, y: h * 0.8, isHoriz: true, isDiag: false, ...baseConfig });
+            } else if (type === 1) {
+              // 4 Vertical
+              lr.lasers.push({ x: w * 0.2, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w * 0.4, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w * 0.6, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w * 0.8, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+            } else if (type === 2) {
+              // Target player + random cross (4 total lasers)
+              const shiftX1 = (rngRef.current() - 0.5) * 150;
+              const shiftX2 = (rngRef.current() - 0.5) * 150;
+              const shiftY1 = (rngRef.current() - 0.5) * 150;
+              lr.lasers.push({ x: w / 2, y: p.y, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w / 2, y: p.y + shiftY1, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: p.x + shiftX1, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: p.x + shiftX2, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+            } else if (type === 3) {
+              // Grid pattern targeting edges
+              const targetY1 = h * 0.2 + (rngRef.current() * 50);
+              const targetX1 = w * 0.2 + (rngRef.current() * 50);
+              const targetY2 = h * 0.8 - (rngRef.current() * 50);
+              const targetX2 = w * 0.8 - (rngRef.current() * 50);
+              lr.lasers.push({ x: w / 2, y: targetY1, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: targetX1, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w / 2, y: targetY2, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: targetX2, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+            } else if (type === 4) {
+              // Custom diagonal setup (X shape over the arena)
+              lr.lasers.push({ cx: w / 2, cy: h / 2, angle: Math.PI / 4, length: 1400, isHoriz: false, isDiag: true, ...baseConfig });
+              lr.lasers.push({ cx: w / 2, cy: h / 2, angle: -Math.PI / 4, length: 1400, isHoriz: false, isDiag: true, ...baseConfig });
+              // Plus 2 vertical constraints
+              lr.lasers.push({ x: w * 0.2, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+              lr.lasers.push({ x: w * 0.8, y: h / 2, isHoriz: false, isDiag: false, ...baseConfig });
+            } else {
+              // Rotating cross shape (Targets player then offsets)
+              lr.lasers.push({ cx: p.x, cy: p.y, angle: 0, length: 1400, isHoriz: false, isDiag: true, ...baseConfig });
+              lr.lasers.push({ cx: p.x, cy: p.y, angle: Math.PI / 2, length: 1400, isHoriz: false, isDiag: true, ...baseConfig });
+              lr.lasers.push({ cx: w / 2, cy: h * 0.2, isHoriz: true, isDiag: false, ...baseConfig });
+              lr.lasers.push({ cx: w / 2, cy: h * 0.8, isHoriz: true, isDiag: false, ...baseConfig });
+            }
+
+            playLaserChargeSound();
+            lr.nextWaveAtMs = lrElapsedMs + 850 + rngRef.current() * 300; // Extreme pacing (~1 wave roughly per second)
+          }
+
+          // Update Lasers
+          for (let i = lr.lasers.length - 1; i >= 0; i--) {
+            const L = lr.lasers[i];
+            const prevElapsed = L.elapsed;
+            const curElapsed = (lrElapsedMs - L.spawnedAtMs) / 1000;
+            L.elapsed = curElapsed;
+            const wasCharging = prevElapsed < L.chargeTime;
+            const isCharging = curElapsed < L.chargeTime;
+
+            if (wasCharging && !isCharging) {
+              playLaserFireSound();
+              addShake(12, 150);
+            }
+            if (curElapsed >= L.chargeTime + L.activeTime) {
+              lr.lasers.splice(i, 1);
+            }
+          }
+        }
+      }
+
       const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE" || rad.warning || rad.active || mode === "boss";
+      const isLaserRoundPause = lr.warning || lr.active;
 
       let guard = 0;
       while (elapsedMs >= spawnRef.current.nextSpawnAtMs && guard < 50) {
-        if (!isBossTime) {
+        if (!isBossTime && !isLaserRoundPause) {
           spawnBullets(w, h, difficulty);
         }
         // Scale gap: starts at 800ms, decreases to 500ms at max difficulty (slower decrease)
@@ -1570,7 +1769,7 @@ export default function Game({
 
       // POWERUP SPAWNING
       const pRef = powerupRef.current;
-      if (!isBossTime) {
+      if (!isBossTime && !isLaserRoundPause) {
         if (elapsedMs >= pRef.nextCorruptSpawnAtMs) {
           if (!pRef.active) {
             const rand = rngRef.current;
@@ -1756,6 +1955,38 @@ export default function Game({
               if (distToLine < L.thick / 2 + p.r - 2 && forwardDist > 0 && forwardDist < L.length) {
                 tookHit = true; applyDamage(20, null); break;
               }
+            }
+          }
+        }
+      }
+
+      // Laser Round Collision check
+      const lr = laserRoundRef.current;
+      if (!tookHit && lr.active) {
+        for (const L of lr.lasers) {
+          if (L.elapsed > L.chargeTime) {
+            let hit = false;
+            
+            if (L.isDiag) {
+              // Math for checking diagonal laser collision
+              const dx = p.x - L.cx;
+              const dy = p.y - L.cy;
+              const distToLine = Math.abs(dx * Math.sin(-L.angle) + dy * Math.cos(-L.angle));
+              // Allow collision detection natively within bounds as length is artificially huge
+              if (distToLine < L.thick / 2 + p.r - 3) {
+                hit = true;
+              }
+            } else {
+              // Orthogonal laser
+              hit = L.isHoriz
+                ? Math.abs(p.y - L.y) < L.thick / 2 + p.r - 3
+                : Math.abs(p.x - L.x) < L.thick / 2 + p.r - 3;
+            }
+
+            if (hit) {
+              tookHit = true;
+              applyDamage(20, null);
+              break;
             }
           }
         }
@@ -1999,6 +2230,71 @@ export default function Game({
         ctx.font = "900 48px monospace";
         ctx.fillText("APPROACHING", w / 2, h / 2 + 30);
         ctx.shadowBlur = 0;
+      }
+    }
+
+    const lr = laserRoundRef.current;
+    if (lr.warning) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.fillRect(0, 0, w, h);
+
+      const flash = Math.floor(now / 120) % 2 === 0;
+      if (flash) {
+        ctx.fillStyle = "white";
+        ctx.font = "900 64px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("WARNING", w / 2, h / 2 - 40);
+        
+        ctx.fillStyle = "#FF3366";
+        ctx.font = "900 48px monospace";
+        ctx.fillText("LASER ROUND", w / 2, h / 2 + 30);
+      }
+    }
+
+    if (lr.active) {
+      // Small HUD title overlay
+      ctx.fillStyle = "#FF3366";
+      ctx.font = "bold 16px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("LASER ROUND", w / 2, 30);
+
+      // Draw LR lasers directly (reusing white aesthetics)
+      for (const L of lr.lasers) {
+        if (L.elapsed < L.chargeTime) {
+          ctx.fillStyle = "rgba(255, 50, 100, 0.25)";
+          if (L.isDiag) {
+            ctx.save(); 
+            ctx.translate(L.cx, L.cy); 
+            ctx.rotate(L.angle);
+            ctx.fillRect(-L.length/2, -2, L.length, 4);
+            ctx.restore();
+          } else if (L.isHoriz) {
+            ctx.fillRect(0, L.y - 2, w, 4);
+          } else {
+            ctx.fillRect(L.x - 2, 0, 4, h);
+          }
+        } else {
+          const activeRatio = Math.min(1, Math.max(0, (L.elapsed - L.chargeTime) / L.activeTime));
+          const fade = Math.pow(1 - activeRatio, 1.5); // Snappier fade out
+          ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+          ctx.shadowColor = "#FF3366";
+          ctx.shadowBlur = 20;
+          const th = L.thick * (1 - activeRatio * 0.1);
+          
+          if (L.isDiag) {
+            ctx.save(); 
+            ctx.translate(L.cx, L.cy); 
+            ctx.rotate(L.angle);
+            ctx.fillRect(-L.length/2, -th / 2, L.length, th);
+            ctx.restore();
+          } else if (L.isHoriz) {
+            ctx.fillRect(0, L.y - th / 2, w, th);
+          } else {
+            ctx.fillRect(L.x - th / 2, 0, th, h);
+          }
+          ctx.shadowBlur = 0;
+        }
       }
     }
 
@@ -2337,7 +2633,9 @@ export default function Game({
     }
 
     if (phaseRef.current === PHASE.PLAYING) {
-      rafRef.current = requestAnimationFrame(loop);
+      if (!document.hidden) {
+        rafRef.current = requestAnimationFrame(loop);
+      }
     }
   }
 

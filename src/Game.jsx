@@ -588,6 +588,9 @@ export default function Game({
   // keyboard
   useEffect(() => {
     const down = (e) => {
+      // Guarantee audio context unlocks on first keypress (critical for instant-start modes like Boss and TimeTrial)
+      unlockAudio();
+      
       const k = e.key.toLowerCase();
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) {
         e.preventDefault();

@@ -102,7 +102,7 @@ function getEnemyInfo({ p1, p2, me }) {
   const meUid = me?.uid;
   const left = p1 || null;
   const right = p2 || null;
-  
+
   let enemy = null;
   if (meUid && left?.uid === meUid) {
     enemy = right;
@@ -111,7 +111,7 @@ function getEnemyInfo({ p1, p2, me }) {
   } else {
     enemy = right || left;
   }
-  
+
   return {
     enemy,
     enemyName: enemy?.username ? safeUsername(enemy.username) : "OPPONENT",
@@ -125,7 +125,7 @@ function getOpponentName(me, matchInfo) {
   const meUid = me?.uid;
   const p1 = matchInfo?.p1;
   const p2 = matchInfo?.p2;
-  
+
   // Prefer p2.username if I am p1
   if (meUid && p1?.uid === meUid) {
     return safeUsername(p2?.username) || "OPPONENT";
@@ -140,11 +140,13 @@ function getOpponentName(me, matchInfo) {
 
 // ========== HeaderBar Component (Internal) ==========
 // Clean top HUD bar above canvas - shown during COUNTDOWN + PLAYING
-function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase, guardStatus }) {
+function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase, guardStatus, corruptHealRem }) {
   const showBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
-  
+
   if (!showBar) return null;
-  
+
+  const isCorruptActive = corruptHealRem > 0;
+
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-black border-b border-white/20 min-h-[48px]">
       {/* Left: Names - w-[30%] min-w-0 */}
@@ -157,16 +159,21 @@ function HeaderBar({ myName, oppName, hp, timerText, hpHitPulse, phase, guardSta
           {oppName}
         </span>
       </div>
-      
+
       {/* Center: Timer - w-[32%] flex justify-center */}
       <div className="w-[32%] flex justify-center">
         <span className={`font-mono text-3xl text-white tabular-nums ${phase === PHASE.PLAYING ? 'animate-pulse' : ''}`}>
           {timerText}
         </span>
       </div>
-      
+
       {/* Right: HP + Guard - w-[38%] flex justify-end */}
       <div className="w-[38%] flex justify-end items-center gap-3">
+        {isCorruptActive && (
+          <div className="text-xs font-bold text-purple-400 font-mono bg-purple-900/40 px-2 py-1 rounded animate-pulse">
+            REVERSE: {corruptHealRem.toFixed(1)}s
+          </div>
+        )}
         <div className="flex items-center">
           <span className={`font-mono text-3xl tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
             {hp}
@@ -198,11 +205,13 @@ export default function Game({
 
   const surviveStartRef = useRef(0);
   const endAtRef = useRef(null); // Frozen timestamp when match ends
-  
+
   // Guard skill timing
   const guardUntilRef = useRef(0); // When guard invincibility expires
   const guardCdUntilRef = useRef(0); // When guard cooldown expires
-  
+  // Corrupt Heal powerup timing
+  const corruptHealUntilRef = useRef(0); // When corrupt heal expires
+
   // Track previous HP for hit animation
   const prevHpRef = useRef(100);
   const hpPulseRef = useRef(false);
@@ -252,7 +261,7 @@ export default function Game({
   const playerRef = useRef({ x: 0, y: 0, r: 10 });
   const bulletsRef = useRef([]);
   const spawnRef = useRef({ nextSpawnAtMs: 0 });
-  const powerupRef = useRef({ active: null, nextSpawnAtMs: 10000 });
+  const powerupRef = useRef({ active: null, nextSpawnAtMs: 10000, nextCorruptSpawnAtMs: 60000 });
   const healTextRef = useRef({ text: "", until: 0 });
   const bossRef = useRef({
     state: "IDLE",
@@ -264,6 +273,37 @@ export default function Game({
   });
 
   const shakeRef = useRef({ until: 0, amp: 0 });
+
+  const maxHpRef = useRef(100);
+  const radianceBossRef = useRef({
+    triggered: false,
+    warning: false,
+    active: false,
+    defeated: false,
+    warningStartMs: 0,
+    bossStartMs: 0,
+    hp: 100,
+    phaseTimeMs: 0,
+    attackType: null,
+    nextAttackAtMs: 0,
+    homingOrbs: [],
+    lasers: [],
+    wallSpikes: [],
+    orbCharge: 0,
+    orbChargeMax: 5,
+    collectibleOrb: null,
+    sonicBoomActive: false,
+    sonicBoomUntil: 0,
+    bossPauseStart: 0,
+    bossPauseTotal: 0,
+  });
+  
+  // Visual particles for Radiance enhancements
+  const radParticlesRef = useRef({
+    ambient: [],
+    sparks: [],
+    booms: []
+  });
 
   const audioCtxRef = useRef(null);
   const audioUnlockedRef = useRef(false);
@@ -281,7 +321,17 @@ export default function Game({
   // Compute timer text - use frozen endAt timestamp if match has ended
   const shouldShowTimer = phase === PHASE.PLAYING || phase === PHASE.MATCH_OVER || phase === PHASE.SUMMARY;
   const effectiveNow = endAt ?? nowMs; // Use frozen timestamp if match ended
-  const survivalMs = shouldShowTimer ? Math.max(0, effectiveNow - surviveStart) : 0;
+  let survivalMs = shouldShowTimer ? Math.max(0, effectiveNow - surviveStart) : 0;
+  
+  const radState = radianceBossRef.current;
+  if (radState.triggered) {
+      if (!radState.defeated) {
+          survivalMs = radState.bossPauseStart;
+      } else {
+          survivalMs = Math.max(0, survivalMs - radState.bossPauseTotal);
+      }
+  }
+
   const timerText = fmtMs(survivalMs);
 
   useEffect(() => {
@@ -362,7 +412,7 @@ export default function Game({
       const ctx = audioCtxRef.current;
       if (ctx.state === "suspended") ctx.resume();
       audioUnlockedRef.current = true;
-    } catch {}
+    } catch { }
   }
 
   function playHitSound() {
@@ -386,7 +436,7 @@ export default function Game({
 
       osc.start(now);
       osc.stop(now + 0.07);
-    } catch {}
+    } catch { }
   }
 
   function playHealSound(amount = 20) {
@@ -395,10 +445,10 @@ export default function Game({
       if (!ctx || !audioUnlockedRef.current) return;
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      
+
       osc.type = "sine";
       const now = ctx.currentTime;
-      
+
       if (amount >= 50) {
         // Stronger boss heal
         osc.frequency.setValueAtTime(440, now);
@@ -418,10 +468,77 @@ export default function Game({
         osc.start(now);
         osc.stop(now + 0.2);
       }
-      
+
       osc.connect(gain);
       gain.connect(ctx.destination);
-    } catch {}
+    } catch { }
+  }
+
+  function playBossWarningSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "sawtooth";
+      const now = ctx.currentTime;
+      osc.frequency.setValueAtTime(100, now);
+      osc.frequency.exponentialRampToValueAtTime(50, now + 1.5);
+      
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
+      gain.gain.linearRampToValueAtTime(0, now + 1.5);
+      
+      osc.start(now);
+      osc.stop(now + 1.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch { }
+  }
+
+  function playLaserChargeSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "sine";
+      const now = ctx.currentTime;
+      osc.frequency.setValueAtTime(800, now);
+      osc.frequency.linearRampToValueAtTime(2000, now + 1.0);
+      
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.1, now + 1.0);
+      
+      osc.start(now);
+      osc.stop(now + 1.0);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch { }
+  }
+
+  function playLaserFireSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = "square";
+      const now = ctx.currentTime;
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
+      
+      gain.gain.setValueAtTime(0.3, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      
+      osc.start(now);
+      osc.stop(now + 0.4);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch { }
   }
 
   function addShake(amount = 10, ms = 140) {
@@ -447,6 +564,67 @@ export default function Game({
           addShake(4, 80); // Small shake for feedback
         }
         // Don't add space to movement keys
+        return;
+      }
+
+      // Sonic Boom activation (r)
+      if (k === "r" && !e.repeat) {
+        const rad = radianceBossRef.current;
+        if (phaseRef.current === PHASE.PLAYING && rad.active && rad.orbCharge >= rad.orbChargeMax) {
+          rad.orbCharge = 0;
+          rad.collectibleOrb = null;
+          rad.sonicBoomActive = true;
+          rad.sonicBoomUntil = Date.now() + 500;
+          rad.hp = Math.max(0, rad.hp - 20);
+          addShake(20, 600);
+          playLaserFireSound(); 
+          
+          // Spawn boom visuals
+          radParticlesRef.current.booms.push({ r: 10, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600), life: 0.5, elapsed: 0 });
+          radParticlesRef.current.booms.push({ r: 5, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600) * 0.8, life: 0.6, elapsed: 0, delay: 0.1 });
+          
+          // Spawn boss hit sparks
+          const bx = (window.innerWidth || 900) / 2;
+          const by = 120;
+          for(let i = 0; i < 30; i++) {
+             const ang = Math.random() * Math.PI * 2;
+             const spd = 200 + Math.random() * 400;
+             radParticlesRef.current.sparks.push({
+               x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+               life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
+               color: Math.random() > 0.5 ? "white" : "gold"
+             });
+          }
+
+          if (rad.hp <= 0 && !rad.defeated) {
+            rad.active = true; // Keep active briefly for death anim
+            rad.defeated = true;
+            rad.bossDeathAnimUntil = Date.now() + 1500;
+            const currentElapsed = Date.now() - surviveStartRef.current;
+            rad.bossPauseTotal = currentElapsed - rad.bossPauseStart;
+            rad.homingOrbs = [];
+            rad.lasers = [];
+            rad.wallSpikes = [];
+            
+            // INCREASE MAX HP TO 150
+            maxHpRef.current = 150;
+            setHp(150);
+            healTextRef.current = { text: "MAX HP INCREASED!", until: Date.now() + 3000 };
+            setHpPulse(true);
+            setTimeout(() => setHpPulse(false), 500);
+            
+            // Death explosion particles
+            for(let i = 0; i < 60; i++) {
+               const ang = Math.random() * Math.PI * 2;
+               const spd = 100 + Math.random() * 600;
+               radParticlesRef.current.sparks.push({
+                 x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+                 life: 0.8 + Math.random() * 0.7, elapsed: 0, r: 3 + Math.random() * 5,
+                 color: "white"
+               });
+            }
+          }
+        }
         return;
       }
 
@@ -492,7 +670,7 @@ export default function Game({
     socket.on("matchFound", ({ roomId, startAt, seed, mode, p1, p2 }) => {
       try {
         console.log("[matchFound]", { roomId, startAt, seed, mode, p1, p2 });
-        
+
         // starting a brand‑new match – clear any previous results
         lastResultRef.current = null;
 
@@ -511,7 +689,7 @@ export default function Game({
 
         // Reset HP tracking
         prevHpRef.current = 100;
-        
+
         setWinnerId(null);
         phaseRef.current = PHASE.MATCH_FOUND;
         setPhase(PHASE.MATCH_FOUND);
@@ -529,7 +707,7 @@ export default function Game({
     socket.on("game:start", ({ roomId, startAt, seed }) => {
       try {
         console.log("[game:start]", { roomId, startAt, seed });
-        
+
         setRoomId(roomId);
         setStartAt(startAt);
         if (typeof seed === "number") setSeed(seed);
@@ -545,7 +723,7 @@ export default function Game({
       try {
         console.log("[hpUpdate]", data);
         const { targetSocketId, hp: newHp } = data;
-        
+
         // Update enemy HP if this is the enemy
         if (targetSocketId === enemySocketId) {
           setEnemyHp(newHp);
@@ -650,16 +828,16 @@ export default function Game({
     // Start immediately for time trial
     const localSeed = Math.floor(Math.random() * 1e9);
     setSeed(localSeed);
-    
+
     setTimeout(() => {
       phaseRef.current = PHASE.COUNTDOWN;
       setPhase(PHASE.COUNTDOWN);
-      
+
       const countdownStart = Date.now();
       const countdownDuration = 3000;
       const gameStart = countdownStart + countdownDuration;
       setStartAt(gameStart);
-      
+
       setTimeout(() => {
         beginMatch(gameStart, localSeed);
       }, countdownDuration);
@@ -687,7 +865,16 @@ export default function Game({
     if (s <= 0) return;
 
     const finalTime = endAt ?? nowMs; // Use frozen endAt if available
-    const survivalMs = finalTime - s;
+    let survivalMs = finalTime - s;
+    const radState = radianceBossRef.current;
+    if (radState.triggered) {
+        if (!radState.defeated) {
+            survivalMs = radState.bossPauseStart;
+        } else {
+            survivalMs = Math.max(0, survivalMs - radState.bossPauseTotal);
+        }
+    }
+    
     if (survivalMs > 0) {
       submitTimeTrialScore(survivalMs);
     }
@@ -700,7 +887,7 @@ export default function Game({
     setHpPulse(false);
     bulletsRef.current = [];
     spawnRef.current = { nextSpawnAtMs: 0 };
-    powerupRef.current = { active: null, nextSpawnAtMs: 10000 };
+    powerupRef.current = { active: null, nextSpawnAtMs: 10000, nextCorruptSpawnAtMs: 60000 };
     healTextRef.current = { text: "", until: 0 };
     bossRef.current = {
       state: "IDLE",
@@ -712,12 +899,41 @@ export default function Game({
     };
     lastHitAtRef.current = -9999;
     prevHpRef.current = 100;
-    
+
     // Reset guard skill
     guardUntilRef.current = 0;
     guardCdUntilRef.current = 0;
+    corruptHealUntilRef.current = 0;
 
     shakeRef.current = { until: 0, amp: 0 };
+    maxHpRef.current = 100;
+    radianceBossRef.current = {
+      triggered: false,
+      warning: false,
+      active: false,
+      defeated: false,
+      warningStartMs: 0,
+      bossStartMs: 0,
+      hp: 100,
+      phaseTimeMs: 0,
+      attackType: null,
+      nextAttackAtMs: 0,
+      homingOrbs: [],
+      lasers: [],
+      wallSpikes: [],
+      orbCharge: 0,
+      orbChargeMax: 5,
+      collectibleOrb: null,
+      sonicBoomActive: false,
+      sonicBoomUntil: 0,
+      bossPauseStart: 0,
+      bossPauseTotal: 0,
+    };
+    radParticlesRef.current = {
+      ambient: [],
+      sparks: [],
+      booms: []
+    };
 
     const c = canvasRef.current;
     const w = c?.width || 900;
@@ -771,7 +987,7 @@ export default function Game({
     // ✅ If you leave mid-ranked match, count as forfeit (server will apply rating change)
     const rid = roomIdRef.current;
     lastResultRef.current = null;
-    
+
     if (mode === "ranked" && phaseRef.current === PHASE.PLAYING && rid) {
       socket.emit("game:forfeit", { roomId: rid });
     }
@@ -782,19 +998,19 @@ export default function Game({
       if (phaseRef.current === PHASE.QUEUE && mode !== "timeTrial") {
         socket.emit("matchmaking:leave");
       }
-    } catch {}
+    } catch { }
 
     onExit?.();
   }
 
   function joinQueue() {
     unlockAudio();
-    
+
     // TimeTrial mode: start immediately
     if (mode === "timeTrial") {
       return;
     }
-    
+
     phaseRef.current = PHASE.QUEUE;
     setPhase(PHASE.QUEUE);
     socket.emit("matchmaking:join", { mode });
@@ -810,13 +1026,13 @@ export default function Game({
     try {
       setTimeTrialSubmissionStatus("submitting");
       setTimeTrialSubmissionMsg("Submitting...");
-      
+
       const result = await submitTimeTrial(timeMs);
-      
+
       if (result?.ok) {
         setBestTimeTrialMs(result.bestTimeTrialMs);
         setTimeTrialImproved(result.improved);
-        
+
         if (result.improved) {
           setTimeTrialSubmissionStatus("success");
           setTimeTrialSubmissionMsg("New Personal Best! 🎉");
@@ -907,6 +1123,10 @@ export default function Game({
     return now < guardUntilRef.current;
   }
 
+  function isCorruptHealActive(now) {
+    return now < corruptHealUntilRef.current;
+  }
+
   function isGuardReady(now) {
     return now >= guardCdUntilRef.current;
   }
@@ -920,95 +1140,95 @@ export default function Game({
       boss.attackCount++;
       const rand = rngRef.current;
       const attackType = Math.floor(rand() * 4);
-      
+
       if (attackType === 0) {
-         const isHoriz = rand() > 0.5;
-         const gapSize = 140;
-         const gapStart = 40 + rand() * (isHoriz ? h - 220 : w - 220);
-         const speed = 250;
-         const fromLeftOrTop = rand() > 0.5;
-         
-         const count = isHoriz ? h / 35 : w / 35;
-         for (let i = 0; i <= count; i++) {
-            const pos = i * 35;
-            if (pos > gapStart && pos < gapStart + gapSize) continue;
-            boss.projectiles.push({
-               type: 'bone',
-               x: isHoriz ? (fromLeftOrTop ? -30 : w + 30) : pos,
-               y: isHoriz ? pos : (fromLeftOrTop ? -30 : h + 30),
-               vx: isHoriz ? (fromLeftOrTop ? speed : -speed) : 0,
-               vy: isHoriz ? 0 : (fromLeftOrTop ? speed : -speed),
-               r: 12,
-            });
-         }
+        const isHoriz = rand() > 0.5;
+        const gapSize = 140;
+        const gapStart = 40 + rand() * (isHoriz ? h - 220 : w - 220);
+        const speed = 250;
+        const fromLeftOrTop = rand() > 0.5;
+
+        const count = isHoriz ? h / 35 : w / 35;
+        for (let i = 0; i <= count; i++) {
+          const pos = i * 35;
+          if (pos > gapStart && pos < gapStart + gapSize) continue;
+          boss.projectiles.push({
+            type: 'bone',
+            x: isHoriz ? (fromLeftOrTop ? -30 : w + 30) : pos,
+            y: isHoriz ? pos : (fromLeftOrTop ? -30 : h + 30),
+            vx: isHoriz ? (fromLeftOrTop ? speed : -speed) : 0,
+            vy: isHoriz ? 0 : (fromLeftOrTop ? speed : -speed),
+            r: 12,
+          });
+        }
       } else if (attackType === 1) {
-         const isHoriz = rand() > 0.5;
-         boss.lasers.push({
-           x: isHoriz ? w/2 : p.x,
-           y: isHoriz ? p.y : h/2,
-           isHoriz,
-           chargeTime: 0.8,
-           activeTime: 0.3,
-           elapsed: 0,
-           thick: 90,
-         });
-         playLaserChargeSound();
+        const isHoriz = rand() > 0.5;
+        boss.lasers.push({
+          x: isHoriz ? w / 2 : p.x,
+          y: isHoriz ? p.y : h / 2,
+          isHoriz,
+          chargeTime: 0.8,
+          activeTime: 0.3,
+          elapsed: 0,
+          thick: 90,
+        });
+        playLaserChargeSound();
       } else if (attackType === 2) {
-         const cx = w / 2;
-         const cy = h / 2;
-         const numBullets = 18;
-         const angleOffset = rand() * Math.PI * 2;
-         for (let i = 0; i < numBullets; i++) {
-           boss.projectiles.push({
-             type: 'ring',
-             cx, cy,
-             angle: angleOffset + (i / numBullets) * Math.PI * 2,
-             radius: 500,
-             r: 8,
-             speed: 1.2,
-             contractSpeed: 100
-           });
-         }
+        const cx = w / 2;
+        const cy = h / 2;
+        const numBullets = 18;
+        const angleOffset = rand() * Math.PI * 2;
+        for (let i = 0; i < numBullets; i++) {
+          boss.projectiles.push({
+            type: 'ring',
+            cx, cy,
+            angle: angleOffset + (i / numBullets) * Math.PI * 2,
+            radius: 500,
+            r: 8,
+            speed: 1.2,
+            contractSpeed: 100
+          });
+        }
       } else if (attackType === 3) {
-         const shiftX = (rand() - 0.5) * 100;
-         const shiftY = (rand() - 0.5) * 100;
-         boss.lasers.push({ x: p.x + shiftX, y: h/2, isHoriz: false, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
-         boss.lasers.push({ x: w/2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
-         playLaserChargeSound();
+        const shiftX = (rand() - 0.5) * 100;
+        const shiftY = (rand() - 0.5) * 100;
+        boss.lasers.push({ x: p.x + shiftX, y: h / 2, isHoriz: false, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
+        boss.lasers.push({ x: w / 2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
+        playLaserChargeSound();
       }
-      
+
       boss.nextAttackMs = Math.max(elapsedMs + 2200, elapsedMs + 1000 + rand() * 1200);
       if (attackType === 3 || attackType === 1) boss.nextAttackMs -= 400;
     }
 
     for (let i = boss.projectiles.length - 1; i >= 0; i--) {
-       const pr = boss.projectiles[i];
-       if (pr.type === 'bone') {
-          pr.x += pr.vx * dt;
-          pr.y += pr.vy * dt;
-          if (pr.x < -100 || pr.x > w + 100 || pr.y < -100 || pr.y > h + 100) boss.projectiles.splice(i, 1);
-       } else if (pr.type === 'ring') {
-          pr.angle += pr.speed * dt;
-          pr.radius -= pr.contractSpeed * dt;
-          pr.x = pr.cx + Math.cos(pr.angle) * pr.radius;
-          pr.y = pr.cy + Math.sin(pr.angle) * pr.radius;
-          if (pr.radius <= 15) boss.projectiles.splice(i, 1);
-       }
+      const pr = boss.projectiles[i];
+      if (pr.type === 'bone') {
+        pr.x += pr.vx * dt;
+        pr.y += pr.vy * dt;
+        if (pr.x < -100 || pr.x > w + 100 || pr.y < -100 || pr.y > h + 100) boss.projectiles.splice(i, 1);
+      } else if (pr.type === 'ring') {
+        pr.angle += pr.speed * dt;
+        pr.radius -= pr.contractSpeed * dt;
+        pr.x = pr.cx + Math.cos(pr.angle) * pr.radius;
+        pr.y = pr.cy + Math.sin(pr.angle) * pr.radius;
+        if (pr.radius <= 15) boss.projectiles.splice(i, 1);
+      }
     }
 
     for (let i = boss.lasers.length - 1; i >= 0; i--) {
-       const L = boss.lasers[i];
-       const wasCharging = L.elapsed < L.chargeTime;
-       L.elapsed += dt;
-       const isCharging = L.elapsed < L.chargeTime;
-       
-       if (wasCharging && !isCharging) {
-           playLaserFireSound();
-           addShake(18, 200);
-       }
-       if (L.elapsed >= L.chargeTime + L.activeTime) {
-           boss.lasers.splice(i, 1);
-       }
+      const L = boss.lasers[i];
+      const wasCharging = L.elapsed < L.chargeTime;
+      L.elapsed += dt;
+      const isCharging = L.elapsed < L.chargeTime;
+
+      if (wasCharging && !isCharging) {
+        playLaserFireSound();
+        addShake(18, 200);
+      }
+      if (L.elapsed >= L.chargeTime + L.activeTime) {
+        boss.lasers.splice(i, 1);
+      }
     }
   }
 
@@ -1066,10 +1286,10 @@ export default function Game({
         boss.lasers = [];
         spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // brief pause after boss
         addShake(15, 500);
-        
+
         // BOSS FIGHT HEAL
         setHp((old) => {
-          const newHp = Math.min(100, old + 50);
+          const newHp = Math.min(maxHpRef.current, old + 50);
           if (newHp > old) playHealSound(50);
           return newHp;
         });
@@ -1078,7 +1298,130 @@ export default function Game({
         setTimeout(() => setHpPulse(false), 300);
       }
 
-      const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE";
+      const rad = radianceBossRef.current;
+      if (!rad.triggered && elapsedMs >= 90000 && !rad.defeated) {
+        rad.triggered = true;
+        rad.warning = true;
+        rad.warningStartMs = elapsedMs;
+        rad.bossPauseStart = elapsedMs;
+        bulletsRef.current = [];
+        addShake(30, 3000);
+        playBossWarningSound();
+      } else if (rad.warning && elapsedMs >= rad.warningStartMs + 3000) {
+        rad.warning = false;
+        rad.active = true;
+        rad.bossStartMs = elapsedMs;
+        rad.phaseTimeMs = elapsedMs;
+        rad.nextAttackAtMs = elapsedMs + 1500;
+        rad.hp = 100;
+        rad.orbCharge = 0;
+        rad.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
+      }
+
+      if (rad.active && !rad.defeated) {
+        // Handle Radiance Attacks
+        if (elapsedMs >= rad.nextAttackAtMs) {
+          const attackType = Math.floor(rngRef.current() * 3);
+          rad.attackType = attackType;
+          if (attackType === 0) {
+             // following orbs
+             rad.homingOrbs.push({ x: w/2, y: 100, vx: 0, vy: 0, r: 10 });
+             rad.homingOrbs.push({ x: w/2 - 50, y: 100, vx: 0, vy: 0, r: 10 });
+             rad.homingOrbs.push({ x: w/2 + 50, y: 100, vx: 0, vy: 0, r: 10 });
+          } else if (attackType === 1) {
+             // spikes at walls
+             const isVert = rngRef.current() > 0.5;
+             if (isVert) {
+               rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current()*(w-40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
+               rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current()*(w-40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0 });
+             } else {
+               rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current()*(h-40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
+               rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current()*(h-40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0 });
+             }
+          } else if (attackType === 2) {
+             // rotating lasers
+             rad.lasers.push({ cx: w/2, cy: 120, angle: 0, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
+             rad.lasers.push({ cx: w/2, cy: 120, angle: Math.PI, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0 });
+             playLaserChargeSound();
+          }
+          rad.nextAttackAtMs = elapsedMs + 3500 + rngRef.current() * 1500;
+        }
+
+        // Update attacks
+        for (let i = rad.homingOrbs.length - 1; i >= 0; i--) {
+           const orb = rad.homingOrbs[i];
+           const dx = p.x - orb.x;
+           const dy = p.y - orb.y;
+           const dist = Math.hypot(dx, dy) || 1;
+           const targetSpeed = 100;
+           orb.vx += (dx / dist) * 150 * dt;
+           orb.vy += (dy / dist) * 150 * dt;
+           const curSpeed = Math.hypot(orb.vx, orb.vy);
+           if (curSpeed > targetSpeed) {
+              orb.vx = (orb.vx / curSpeed) * targetSpeed;
+              orb.vy = (orb.vy / curSpeed) * targetSpeed;
+           }
+           orb.x += orb.vx * dt;
+           orb.y += orb.vy * dt;
+           if (elapsedMs > rad.bossStartMs + 60000 && curSpeed > 300) rad.homingOrbs.splice(i, 1);
+        }
+
+        for (let i = rad.wallSpikes.length - 1; i >= 0; i--) {
+           const sp = rad.wallSpikes[i];
+           sp.timer += dt;
+           if (sp.state === "WARN" && sp.timer > 1.0) {
+              sp.state = "EXTEND";
+              sp.timer = 0;
+           } else if (sp.state === "EXTEND") {
+              sp.length += 800 * dt;
+              if (sp.length >= sp.maxLength) { sp.length = sp.maxLength; sp.state = "RETRACT"; }
+           } else if (sp.state === "RETRACT") {
+              sp.length -= 400 * dt;
+              if (sp.length <= 0) rad.wallSpikes.splice(i, 1);
+           }
+        }
+
+        for (let i = rad.lasers.length - 1; i >= 0; i--) {
+           const L = rad.lasers[i];
+           const wasCharging = L.elapsed < L.chargeTime;
+           L.elapsed += dt;
+           if (wasCharging && L.elapsed >= L.chargeTime) {
+               playLaserFireSound();
+               addShake(12, 200);
+           }
+           if (L.elapsed >= L.chargeTime + L.activeTime) {
+               rad.lasers.splice(i, 1);
+           } else if (L.elapsed >= L.chargeTime) {
+               L.angle += L.rotSpeed * dt;
+           }
+        }
+        
+        // Orb collection logic
+        if (rad.collectibleOrb && !rad.sonicBoomActive) {
+           const orb = rad.collectibleOrb;
+           const dist = Math.hypot(p.x - orb.x, p.y - orb.y);
+           if (dist < p.r + orb.r) {
+              rad.orbCharge = Math.min(rad.orbChargeMax, rad.orbCharge + 1);
+              playHealSound(20);
+              rad.collectibleOrb = null;
+              if (rad.orbCharge < rad.orbChargeMax) {
+                 setTimeout(() => {
+                    if (radianceBossRef.current.active && !radianceBossRef.current.sonicBoomActive) {
+                       radianceBossRef.current.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
+                    }
+                 }, 600);
+              }
+           }
+        }
+        
+        // Sonic boom ending
+        if (rad.sonicBoomActive && Date.now() > rad.sonicBoomUntil) {
+           rad.sonicBoomActive = false;
+           rad.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
+        }
+      }
+
+      const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE" || rad.warning || rad.active;
 
       let guard = 0;
       while (elapsedMs >= spawnRef.current.nextSpawnAtMs && guard < 50) {
@@ -1098,19 +1441,34 @@ export default function Game({
 
       // POWERUP SPAWNING
       const pRef = powerupRef.current;
-      if (!isBossTime && elapsedMs >= pRef.nextSpawnAtMs) {
-        if (!pRef.active) { // only spawn if one isn't currently active
-          const rand = rngRef.current;
-          pRef.active = {
-            x: 60 + rand() * (w - 120),
-            y: 60 + rand() * (h - 120),
-            r: 12,
-            spawnedAtMs: elapsedMs,
-            expiresAtMs: elapsedMs + 3000,
-            kind: "HEAL"
-          };
+      if (!isBossTime) {
+        if (elapsedMs >= pRef.nextCorruptSpawnAtMs) {
+          if (!pRef.active) {
+            const rand = rngRef.current;
+            pRef.active = {
+              x: 60 + rand() * (w - 120),
+              y: 60 + rand() * (h - 120),
+              r: 12,
+              spawnedAtMs: elapsedMs,
+              expiresAtMs: elapsedMs + 5000,
+              kind: "CORRUPT_HEAL"
+            };
+          }
+          pRef.nextCorruptSpawnAtMs = elapsedMs + 60000;
+        } else if (elapsedMs >= pRef.nextSpawnAtMs) {
+          if (!pRef.active) {
+            const rand = rngRef.current;
+            pRef.active = {
+              x: 60 + rand() * (w - 120),
+              y: 60 + rand() * (h - 120),
+              r: 12,
+              spawnedAtMs: elapsedMs,
+              expiresAtMs: elapsedMs + 3000,
+              kind: "HEAL"
+            };
+          }
+          pRef.nextSpawnAtMs = elapsedMs + 10000; // next check in 10s
         }
-        pRef.nextSpawnAtMs = elapsedMs + 10000; // next check in 10s
       }
 
       // POWERUP EXPIRY
@@ -1132,6 +1490,18 @@ export default function Game({
     }
 
     function applyDamage(dmg, knockbackSource) {
+      if (isCorruptHealActive(now)) {
+        setHp((old) => {
+          const nextHp = Math.min(maxHpRef.current, old + dmg);
+          if (nextHp > old) playHealSound(20);
+          return nextHp;
+        });
+        healTextRef.current = { text: `+${dmg} HP`, until: now + 1500 };
+        setHpPulse(true);
+        setTimeout(() => setHpPulse(false), 200);
+        return;
+      }
+
       lastHitAtRef.current = now;
       addShake(12, 160);
       playHitSound();
@@ -1144,14 +1514,14 @@ export default function Game({
 
       setHp((old) => {
         const nextHp = Math.max(0, old - dmg);
-        
+
         // Check if HP decreased for animation
         if (nextHp < prevHpRef.current) {
           setHpPulse(true);
           setTimeout(() => setHpPulse(false), 150);
         }
         prevHpRef.current = nextHp;
-        
+
         // Emit HP update to server (or locally for timeTrial)
         if (mode === "timeTrial") {
           if (nextHp === 0) {
@@ -1167,18 +1537,20 @@ export default function Game({
       });
 
       if (knockbackSource) {
-         const dx = knockbackSource.x - p.x;
-         const dy = knockbackSource.y - p.y;
-         const dist = Math.hypot(dx, dy) || 1;
-         const push = 10;
-         if (knockbackSource.r !== undefined) {
-           knockbackSource.x += (dx / dist) * push;
-           knockbackSource.y += (dy / dist) * push;
-         }
+        const dx = knockbackSource.x - p.x;
+        const dy = knockbackSource.y - p.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const push = 10;
+        if (knockbackSource.r !== undefined) {
+          knockbackSource.x += (dx / dist) * push;
+          knockbackSource.y += (dy / dist) * push;
+        }
       }
     }
 
     const invincible = isGuardActive(now) || isIFrameActive(now);
+    const rad = radianceBossRef.current;
+    
     if (!invincible) {
       let tookHit = false;
 
@@ -1194,49 +1566,133 @@ export default function Game({
       }
 
       if (!tookHit && bossRef.current) {
-         const boss = bossRef.current;
-         for (let i = 0; i < boss.projectiles.length; i++) {
-            const pr = boss.projectiles[i];
-            const dist = Math.hypot(pr.x - p.x, pr.y - p.y);
-            if (dist < p.r + pr.r - 2) {
-               tookHit = true;
-               applyDamage(12, pr);
-               break;
-            }
-         }
+        const boss = bossRef.current;
+        for (let i = 0; i < boss.projectiles.length; i++) {
+          const pr = boss.projectiles[i];
+          const dist = Math.hypot(pr.x - p.x, pr.y - p.y);
+          if (dist < p.r + pr.r - 2) {
+            tookHit = true;
+            applyDamage(12, pr);
+            break;
+          }
+        }
       }
 
       if (!tookHit && bossRef.current) {
-         const boss = bossRef.current;
-         for (let i = 0; i < boss.lasers.length; i++) {
-            const L = boss.lasers[i];
-            if (L.elapsed > L.chargeTime) {
-               const hit = L.isHoriz 
-                 ? Math.abs(p.y - L.y) < L.thick/2 + p.r - 2
-                 : Math.abs(p.x - L.x) < L.thick/2 + p.r - 2;
-               if (hit) {
-                  tookHit = true;
-                  applyDamage(20, null);
-                  break;
+        const boss = bossRef.current;
+        for (let i = 0; i < boss.lasers.length; i++) {
+          const L = boss.lasers[i];
+          if (L.elapsed > L.chargeTime) {
+            const hit = L.isHoriz
+              ? Math.abs(p.y - L.y) < L.thick / 2 + p.r - 2
+              : Math.abs(p.x - L.x) < L.thick / 2 + p.r - 2;
+            if (hit) {
+              tookHit = true;
+              applyDamage(20, null);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!tookHit && rad.active && !rad.defeated) {
+         // homing orbs
+         for (const orb of rad.homingOrbs) {
+            if (Math.hypot(orb.x - p.x, orb.y - p.y) < p.r + orb.r - 2) {
+               tookHit = true; applyDamage(15, orb); break;
+            }
+         }
+         // wall spikes
+         if (!tookHit) {
+            for (const sp of rad.wallSpikes) {
+               if (sp.state === "EXTEND" || sp.state === "RETRACT") {
+                  if (sp.isVert) {
+                     if (Math.abs(p.x - sp.x) < sp.width/2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(18, null); break; }
+                  } else {
+                     if (Math.abs(p.y - sp.y) < sp.width/2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(18, null); break; }
+                  }
+               }
+            }
+         }
+         // lasers
+         if (!tookHit) {
+            for (const L of rad.lasers) {
+               if (L.elapsed >= L.chargeTime) {
+                  const dx = p.x - L.cx;
+                  const dy = p.y - L.cy;
+                  const distToLine = Math.abs(dx * Math.sin(-L.angle) + dy * Math.cos(-L.angle));
+                  const forwardDist = dx * Math.cos(L.angle) + dy * Math.sin(L.angle);
+                  if (distToLine < L.thick/2 + p.r - 2 && forwardDist > 0 && forwardDist < L.length) {
+                     tookHit = true; applyDamage(20, null); break;
+                  }
                }
             }
          }
       }
     }
+      
+    // Update Visual Particles
+    const rParticles = radParticlesRef.current;
+      for (let i = rParticles.ambient.length - 1; i >= 0; i--) {
+         const pVar = rParticles.ambient[i];
+         pVar.elapsed += dt;
+         pVar.y -= pVar.speed * dt;
+         if (pVar.elapsed >= pVar.life) rParticles.ambient.splice(i, 1);
+      }
+      for (let i = rParticles.sparks.length - 1; i >= 0; i--) {
+         const pVar = rParticles.sparks[i];
+         pVar.elapsed += dt;
+         pVar.x += pVar.vx * dt;
+         pVar.y += pVar.vy * dt;
+         pVar.vx *= 0.95; // drag
+         pVar.vy *= 0.95;
+         if (pVar.elapsed >= pVar.life) rParticles.sparks.splice(i, 1);
+      }
+      for (let i = rParticles.booms.length - 1; i >= 0; i--) {
+         const b = rParticles.booms[i];
+         if (b.delay && b.delay > 0) {
+             b.delay -= dt;
+         } else {
+             b.elapsed += dt;
+             b.r = (b.elapsed / b.life) * b.maxR;
+             if (b.elapsed >= b.life) rParticles.booms.splice(i, 1);
+         }
+      }
+      
+      // Spawn Boss Ambient Particles
+      if (rad.active && !rad.defeated) {
+         if (rParticles.ambient.length < 80 && Math.random() > 0.5) {
+            rParticles.ambient.push({
+               x: w/2 + (Math.random()-0.5) * 600,
+               y: 120 + (Math.random()-0.5) * 300,
+               life: 2 + Math.random() * 3,
+               elapsed: 0,
+               speed: 10 + Math.random() * 30,
+               r: 1 + Math.random() * 3,
+               opacity: 0.2 + Math.random() * 0.4
+            });
+         }
+      }
 
     // POWERUP COLLECTION
     const pRef = powerupRef.current;
     if (pRef.active) {
       const dist = Math.hypot(pRef.active.x - p.x, pRef.active.y - p.y);
       if (dist < p.r + pRef.active.r) {
-        setHp((old) => {
-          const nextHp = Math.min(100, old + 20);
-          if (nextHp > old) playHealSound(20);
-          return nextHp;
-        });
-        healTextRef.current = { text: "+20 HP", until: now + 1500 };
-        setHpPulse(true);
-        setTimeout(() => setHpPulse(false), 200);
+        if (pRef.active.kind === "HEAL") {
+          setHp((old) => {
+            const nextHp = Math.min(maxHpRef.current, old + 20);
+            if (nextHp > old) playHealSound(20);
+            return nextHp;
+          });
+          healTextRef.current = { text: "+20 HP", until: now + 1500 };
+          setHpPulse(true);
+          setTimeout(() => setHpPulse(false), 200);
+        } else if (pRef.active.kind === "CORRUPT_HEAL") {
+          corruptHealUntilRef.current = now + 5000;
+          playHealSound(50); // play slightly louder sound for pickup
+          addShake(8, 200);
+        }
         pRef.active = null; // consume
       }
     }
@@ -1299,119 +1755,356 @@ export default function Game({
 
     const boss = bossRef.current;
     if (boss && boss.state === "WARNING") {
-       ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
+      ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
+      ctx.fillRect(0, 0, w, h);
+
+      const flash = Math.floor(now / 150) % 2 === 0;
+      if (flash) {
+        ctx.fillStyle = "white";
+        ctx.font = "900 64px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("WARNING", w / 2, h / 2 - 40);
+        ctx.fillStyle = "red";
+        ctx.font = "900 48px monospace";
+        ctx.fillText("BOSS INCOMING", w / 2, h / 2 + 30);
+      }
+    }
+
+    if (boss && boss.state === "ACTIVE") {
+      ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
+      ctx.font = "bold 16px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("BOSS PHASE", w / 2, 30);
+
+      const bx = w / 2;
+      const by = 80 + Math.sin(boss.animTime * 3) * 10;
+
+      ctx.fillStyle = "white";
+      ctx.beginPath();
+      ctx.arc(bx, by, 30, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "black";
+      ctx.beginPath();
+      ctx.arc(bx - 12, by - 5, 8, 0, Math.PI * 2);
+      ctx.arc(bx + 12, by - 5, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (rngRef.current() > 0.95) {
+        ctx.fillStyle = "red";
+        ctx.beginPath();
+        ctx.arc(bx - 12, by - 5, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = "black";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(bx, by + 5, 12, 0.2, Math.PI - 0.2);
+      ctx.stroke();
+
+      for (const pr of boss.projectiles) {
+        ctx.fillStyle = "white";
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, pr.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      for (const L of boss.lasers) {
+        if (L.elapsed < L.chargeTime) {
+          ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
+          if (L.isHoriz) {
+            ctx.fillRect(0, L.y - 2, w, 4);
+          } else {
+            ctx.fillRect(L.x - 2, 0, 4, h);
+          }
+        } else {
+          const activeRatio = (L.elapsed - L.chargeTime) / L.activeTime;
+          const fade = 1 - activeRatio;
+          ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+          ctx.shadowColor = "red";
+          ctx.shadowBlur = 15;
+          const th = L.thick * (1 - activeRatio * 0.2);
+          if (L.isHoriz) {
+            ctx.fillRect(0, L.y - th / 2, w, th);
+          } else {
+            ctx.fillRect(L.x - th / 2, 0, th, h);
+          }
+          ctx.shadowBlur = 0;
+        }
+      }
+    }
+
+    if (rad.warning) {
+       ctx.fillStyle = "rgba(255, 230, 100, 0.15)";
        ctx.fillRect(0, 0, w, h);
-       
        const flash = Math.floor(now / 150) % 2 === 0;
        if (flash) {
          ctx.fillStyle = "white";
          ctx.font = "900 64px monospace";
          ctx.textAlign = "center";
          ctx.textBaseline = "middle";
-         ctx.fillText("WARNING", w/2, h/2 - 40);
-         ctx.fillStyle = "red";
+         ctx.shadowColor = "gold";
+         ctx.shadowBlur = 20;
+         ctx.fillText("DIVINE PRESENCE", w / 2, h / 2 - 40);
+         ctx.fillStyle = "gold";
          ctx.font = "900 48px monospace";
-         ctx.fillText("BOSS INCOMING", w/2, h/2 + 30);
+         ctx.fillText("APPROACHING", w / 2, h / 2 + 30);
+         ctx.shadowBlur = 0;
        }
     }
 
-    if (boss && boss.state === "ACTIVE") {
-       ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
-       ctx.font = "bold 16px monospace";
-       ctx.textAlign = "center";
-       ctx.fillText("BOSS PHASE", w/2, 30);
+    if (rad.active) {
+       // Arena Glow
+       ctx.fillStyle = rad.defeated ? "rgba(255, 255, 255, 0.3)" : "rgba(255, 240, 180, 0.05)";
+       ctx.fillRect(0, 0, w, h);
 
-       const bx = w/2;
-       const by = 80 + Math.sin(boss.animTime * 3) * 10;
+       const bx = w / 2;
+       const by = 120 + Math.sin(now / 500) * 15;
        
-       ctx.fillStyle = "white";
-       ctx.beginPath();
-       ctx.arc(bx, by, 30, 0, Math.PI * 2);
-       ctx.fill();
-       
-       ctx.fillStyle = "black";
-       ctx.beginPath();
-       ctx.arc(bx - 12, by - 5, 8, 0, Math.PI * 2);
-       ctx.arc(bx + 12, by - 5, 8, 0, Math.PI * 2);
-       ctx.fill();
-       
-       if (rngRef.current() > 0.95) {
-          ctx.fillStyle = "red";
+       // Draw Boss Entity
+       if (!rad.defeated) {
+          ctx.save();
+          ctx.translate(bx, by);
+          
+          // Outer Halo
+          ctx.shadowColor = "gold";
+          ctx.shadowBlur = 40;
+          ctx.fillStyle = "rgba(255, 255, 200, 0.2)";
           ctx.beginPath();
-          ctx.arc(bx - 12, by - 5, 3, 0, Math.PI*2);
+          ctx.arc(0, 0, 100 + Math.sin(now/200)*10, 0, Math.PI*2);
           ctx.fill();
-       }
 
-       ctx.strokeStyle = "black";
-       ctx.lineWidth = 4;
-       ctx.beginPath();
-       ctx.arc(bx, by + 5, 12, 0.2, Math.PI - 0.2);
-       ctx.stroke();
+          // Rotating Aura Ring
+          ctx.rotate(now / 1500);
+          ctx.strokeStyle = "rgba(255, 215, 0, 0.5)";
+          ctx.lineWidth = 4;
+          for (let i = 0; i < 8; i++) {
+             ctx.beginPath();
+             ctx.moveTo(80, 0);
+             ctx.lineTo(110, 0);
+             ctx.stroke();
+             ctx.rotate((Math.PI * 2) / 8);
+          }
+          
+          ctx.rotate(-now / 1500 * 2); // reverse core rotation
+          // Crown / Sun Spikes
+          ctx.fillStyle = "white";
+          for (let i = 0; i < 12; i++) {
+             ctx.beginPath();
+             ctx.moveTo(30, 0);
+             ctx.lineTo(15, 15);
+             ctx.lineTo(80 + Math.sin(now/150 + i)*15, 0);
+             ctx.lineTo(15, -15);
+             ctx.fill();
+             ctx.rotate((Math.PI * 2) / 12);
+          }
 
-       for (const pr of boss.projectiles) {
+          // Core Body
+          ctx.shadowBlur = 20;
+          ctx.shadowColor = "white";
           ctx.fillStyle = "white";
           ctx.beginPath();
-          ctx.arc(pr.x, pr.y, pr.r, 0, Math.PI * 2);
+          ctx.arc(0, 0, 35, 0, Math.PI * 2);
           ctx.fill();
+
+          // Inner Eye
+          ctx.fillStyle = "rgba(255, 200, 0, 0.8)";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 10, 20, 0, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.fillStyle = "white";
+          ctx.beginPath();
+          ctx.arc(0, 0, 4, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.restore();
+          
+          // Boss HUD
+          ctx.fillStyle = "gold";
+          ctx.font = "bold 20px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("RADIANCE", w / 2, 30);
+          
+          // Boss HP Bar
+          ctx.fillStyle = "rgba(50, 0, 0, 0.5)";
+          ctx.fillRect(w/2 - 150, 45, 300, 15);
+          ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
+          const hpRatio = rad.hp / 100;
+          ctx.fillRect(w/2 - 150, 45, 300 * hpRatio, 15);
+          ctx.strokeStyle = "white";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(w/2 - 150, 45, 300, 15);
+          
+          // Orb Charge UI
+          if (!rad.sonicBoomActive) {
+             const chargeText = rad.orbCharge >= rad.orbChargeMax ? "PRESS R - SONIC BOOM READY" : `CHARGE: ${rad.orbCharge} / ${rad.orbChargeMax}`;
+             ctx.fillStyle = rad.orbCharge >= rad.orbChargeMax ? "white" : "gold";
+             ctx.font = rad.orbCharge >= rad.orbChargeMax ? "bold 24px monospace" : "18px monospace";
+             ctx.shadowColor = "gold";
+             ctx.shadowBlur = rad.orbCharge >= rad.orbChargeMax ? 15 : 0;
+             if (rad.orbCharge >= rad.orbChargeMax && Math.floor(now/100)%2===0) {
+                 ctx.shadowBlur = 25;
+                 ctx.fillStyle = "rgba(255, 255, 200, 1)";
+             }
+             ctx.fillText(chargeText, w / 2, h - 30);
+             ctx.shadowBlur = 0;
+          }
        }
 
-       for (const L of boss.lasers) {
-          if (L.elapsed < L.chargeTime) {
-             ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
-             if (L.isHoriz) {
-                 ctx.fillRect(0, L.y - 2, w, 4);
+       // Radiance Particles
+       const rPart = radParticlesRef.current;
+       ctx.save();
+       ctx.globalCompositeOperation = "screen";
+       for (const pVar of rPart.ambient) {
+          ctx.fillStyle = `rgba(255, 240, 150, ${pVar.opacity})`;
+          ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI*2); ctx.fill();
+       }
+       for (const pVar of rPart.sparks) {
+          ctx.fillStyle = pVar.color;
+          ctx.shadowColor = pVar.color;
+          ctx.shadowBlur = 10;
+          ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI*2); ctx.fill();
+       }
+       for (const b of rPart.booms) {
+          if (!b.delay || b.delay <= 0) {
+              ctx.strokeStyle = `rgba(255, 255, 255, ${1 - b.elapsed/b.life})`;
+              ctx.lineWidth = 15 * (1 - b.elapsed/b.life);
+              ctx.shadowColor = "white";
+              ctx.shadowBlur = 20;
+              ctx.beginPath(); ctx.arc(bx, by, b.r, 0, Math.PI*2); ctx.stroke();
+          }
+       }
+       ctx.restore();
+
+       // Draw Attacks
+       for (const orb of rad.homingOrbs) {
+          ctx.shadowColor = "gold";
+          ctx.shadowBlur = 15;
+          ctx.fillStyle = "white";
+          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "gold"; ctx.lineWidth = 3; ctx.stroke();
+          ctx.shadowBlur = 0;
+       }
+
+       for (const sp of rad.wallSpikes) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+          ctx.shadowColor = "gold"; ctx.shadowBlur = 15;
+          if (sp.isVert) {
+             if (sp.state === "WARN") {
+                ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+                ctx.fillRect(sp.x - sp.width/2, 0, sp.width, h);
              } else {
-                 ctx.fillRect(L.x - 2, 0, 4, h);
+                ctx.fillRect(sp.x - sp.width/2, 0, sp.width, sp.length);
              }
+          } else {
+             if (sp.state === "WARN") {
+                ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+                ctx.fillRect(0, sp.y - sp.width/2, w, sp.width);
+             } else {
+                ctx.fillRect(0, sp.y - sp.width/2, sp.length, sp.width);
+             }
+          }
+          ctx.shadowBlur = 0;
+       }
+
+       for (const L of rad.lasers) {
+          if (L.elapsed < L.chargeTime) {
+             ctx.fillStyle = "rgba(255, 215, 0, 0.2)";
+             ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(L.angle);
+             ctx.fillRect(0, -L.thick/2, L.length, L.thick);
+             ctx.restore();
           } else {
              const activeRatio = (L.elapsed - L.chargeTime) / L.activeTime;
              const fade = 1 - activeRatio;
              ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
-             ctx.shadowColor = "red";
-             ctx.shadowBlur = 15;
-             const th = L.thick * (1 - activeRatio * 0.2);
-             if (L.isHoriz) {
-                 ctx.fillRect(0, L.y - th/2, w, th);
-             } else {
-                 ctx.fillRect(L.x - th/2, 0, th, h);
-             }
-              ctx.shadowBlur = 0;
-           }
-        }
-     }
+             ctx.shadowColor = "gold"; ctx.shadowBlur = 25;
+             ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(L.angle);
+             const th = L.thick * (1 - activeRatio * 0.3);
+             ctx.fillRect(0, -th/2, L.length, th);
+             ctx.restore();
+             ctx.shadowBlur = 0;
+          }
+       }
 
-     // Draw Powerup
-     const powerup = powerupRef.current?.active;
-     if (powerup) {
-       const pr = powerup.r;
-       const px = powerup.x;
-       const py = powerup.y;
-       
-       // Subtle pulse animation
-       const pAlpha = 0.6 + 0.4 * Math.abs(Math.sin(now / 150));
-       
-       ctx.save();
-       ctx.translate(px, py);
-       
-       // Highlight aura
-       ctx.shadowColor = "rgba(100, 255, 100, 0.8)";
-       ctx.shadowBlur = 10;
-       
-       // Plus sign (Green/White)
-       ctx.fillStyle = `rgba(200, 255, 200, ${pAlpha})`;
-       const th = pr * 0.4;
-       ctx.fillRect(-pr, -th/2, pr*2, th); // Horizontal
-       ctx.fillRect(-th/2, -pr, th, pr*2); // Vertical
-       
-       // Outline around plus sign
-       ctx.strokeStyle = `rgba(255, 255, 255, ${pAlpha * 0.8})`;
-       ctx.lineWidth = 1;
-       ctx.beginPath();
-       ctx.arc(0, 0, pr + 4, 0, Math.PI * 2);
-       ctx.stroke();
-       
-       ctx.restore();
-     }
+       // Collectible Radiant Orbs
+       if (rad.collectibleOrb && !rad.sonicBoomActive) {
+          const orb = rad.collectibleOrb;
+          ctx.shadowColor = "white"; ctx.shadowBlur = 15;
+          ctx.fillStyle = "gold";
+          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r + Math.sin(now/100)*2, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "white";
+          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r*0.4, 0, Math.PI*2); ctx.fill();
+          ctx.shadowBlur = 0;
+       }
+    }
+
+    // Draw Powerup
+    const powerup = powerupRef.current?.active;
+    if (powerup) {
+      const pr = powerup.r;
+      const px = powerup.x;
+      const py = powerup.y;
+
+      // Subtle pulse animation
+      const pAlpha = 0.6 + 0.4 * Math.abs(Math.sin(now / 150));
+
+      ctx.save();
+      ctx.translate(px, py);
+
+      if (powerup.kind === "HEAL") {
+        // Highlight aura
+        ctx.shadowColor = "rgba(100, 255, 100, 0.8)";
+        ctx.shadowBlur = 10;
+
+        // Plus sign (Green/White)
+        ctx.fillStyle = `rgba(200, 255, 200, ${pAlpha})`;
+        const th = pr * 0.4;
+        ctx.fillRect(-pr, -th / 2, pr * 2, th); // Horizontal
+        ctx.fillRect(-th / 2, -pr, th, pr * 2); // Vertical
+
+        // Outline around plus sign
+        ctx.strokeStyle = `rgba(255, 255, 255, ${pAlpha * 0.8})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(0, 0, pr + 4, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (powerup.kind === "CORRUPT_HEAL") {
+        // Rotating glitchy diamond for corrupt heal
+        ctx.shadowColor = "rgba(180, 50, 255, 0.8)";
+        ctx.shadowBlur = 15;
+
+        ctx.rotate(now / 300);
+
+        ctx.fillStyle = `rgba(180, 50, 255, ${pAlpha})`;
+        ctx.beginPath();
+        ctx.moveTo(0, -pr - 4);
+        ctx.lineTo(pr + 4, 0);
+        ctx.lineTo(0, pr + 4);
+        ctx.lineTo(-pr - 4, 0);
+        ctx.fill();
+
+        ctx.strokeStyle = `rgba(255, 200, 255, ${pAlpha})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Inner core
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        ctx.beginPath();
+        ctx.arc(0, 0, pr * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Glitch effect
+        if (Math.random() > 0.8) {
+          ctx.fillStyle = "rgba(255, 0, 0, 0.6)";
+          ctx.fillRect(-pr, -3, pr * 2, 6);
+        }
+      }
+
+      ctx.restore();
+    }
 
     // Draw guard ring if active
     if (isGuardActive(now)) {
@@ -1420,6 +2113,17 @@ export default function Game({
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r + 8, 0, Math.PI * 2);
       ctx.stroke();
+    }
+
+    // Draw corrupt heal ring if active
+    if (isCorruptHealActive(now)) {
+      ctx.strokeStyle = `rgba(180, 50, 255, ${0.4 + 0.4 * Math.sin(now / 100)})`;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r + 14, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
 
     // player heart (KEEP ORIGINAL COLOR)
@@ -1437,16 +2141,16 @@ export default function Game({
       const remain = healMsg.until - now;
       const tAlpha = clamp(remain / 400, 0, 1);
       const floatY = 40 - clamp((1500 - remain) / 30, 0, 15);
-      
+
       ctx.fillStyle = `rgba(150, 255, 150, ${tAlpha})`;
       ctx.font = "bold 18px monospace";
       ctx.textAlign = "center";
       ctx.shadowColor = "rgba(0, 255, 0, 0.5)";
       ctx.shadowBlur = 5;
-      
+
       // Draw centered above player if +20, or high up if +50
       if (healMsg.text.includes("50")) {
-        ctx.fillText(healMsg.text, w/2, h/2 - 80 - (2500 - remain) / 50);
+        ctx.fillText(healMsg.text, w / 2, h / 2 - 80 - (2500 - remain) / 50);
       } else {
         ctx.fillText(healMsg.text, p.x, p.y - floatY);
       }
@@ -1555,7 +2259,7 @@ export default function Game({
 
         <div className="relative rounded-2xl border border-white/30 bg-black shadow-xl overflow-hidden">
           {/* Header Bar - shown during COUNTDOWN and PLAYING */}
-          <HeaderBar 
+          <HeaderBar
             myName={myName}
             oppName={opponentName}
             hp={hp}
@@ -1563,6 +2267,7 @@ export default function Game({
             hpHitPulse={hpPulse}
             phase={phase}
             guardStatus={guardStatus}
+            corruptHealRem={Math.max(0, (corruptHealUntilRef.current - nowMs) / 1000)}
           />
 
           {/* Menu Phase: Top HUD */}
@@ -1754,20 +2459,19 @@ export default function Game({
                       {bestTimeTrialMs > 0 && (
                         <>
                           <Stat label="Best Time" value={fmtMs(bestTimeTrialMs)} />
-                          <Stat 
-                            label="Status" 
-                            value={timeTrialImproved ? "New Best!" : "Submitted"} 
+                          <Stat
+                            label="Status"
+                            value={timeTrialImproved ? "New Best!" : "Submitted"}
                           />
                         </>
                       )}
                     </div>
 
                     {timeTrialSubmissionStatus && (
-                      <div className={`mt-3 text-sm font-mono ${
-                        timeTrialSubmissionStatus === "success" ? "text-green-400" :
-                        timeTrialSubmissionStatus === "error" ? "text-red-400" :
-                        "text-white/80"
-                      }`}>
+                      <div className={`mt-3 text-sm font-mono ${timeTrialSubmissionStatus === "success" ? "text-green-400" :
+                          timeTrialSubmissionStatus === "error" ? "text-red-400" :
+                            "text-white/80"
+                        }`}>
                         {timeTrialSubmissionMsg}
                       </div>
                     )}

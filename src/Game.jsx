@@ -140,19 +140,20 @@ function getOpponentName(me, matchInfo) {
 
 // ========== HeaderBar Component (Internal) ==========
 // Clean top HUD bar above canvas - shown during COUNTDOWN + PLAYING
-function HeaderBar({ 
-  myName, oppName, 
-  hp, enemyHp, 
-  timerText, 
+function HeaderBar({
+  myName, oppName,
+  hp, enemyHp,
+  timerText,
   hpHitPulse, enemyHitFlash, enemyHpPulse, enemyHealFlash,
   phase, guardStatus, corruptHealRem,
-  isCompetitive
+  isCompetitive, isStandaloneSans
 }) {
   const showBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
 
   if (!showBar) return null;
 
   const isCorruptActive = corruptHealRem > 0;
+  const showEnemyHp = isCompetitive || isStandaloneSans;
 
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-black border-b border-white/20 min-h-[48px]">
@@ -177,9 +178,9 @@ function HeaderBar({
       {/* Right: HP + Guard - w-[38%] flex justify-end gap-6 */}
       <div className="w-[38%] flex justify-end items-center gap-6">
         {/* Opponent HP Display (Competitive) */}
-        {isCompetitive && oppName && (
+        {showEnemyHp && oppName && (
           <div className="flex flex-col items-end opacity-80">
-            <div className="text-[10px] text-white/50 mb-[-4px]">OPP HP</div>
+            <div className="text-[10px] text-white/50 mb-[-4px]">{isStandaloneSans ? 'BOSS HP' : 'OPP HP'}</div>
             <div className={`font-mono text-2xl tabular-nums transition-all duration-150 ${enemyHitFlash ? 'text-red-400 scale-110' : enemyHealFlash ? 'text-lime-300 scale-110' : 'text-gray-300'}`}>
               {enemyHpPulse ? '...' : enemyHp}
             </div>
@@ -266,10 +267,10 @@ export default function Game({
 
   const [hp, setHp] = useState(100);
   const [enemyHp, setEnemyHp] = useState(100);
-  
+
   const [hitFlash, setHitFlash] = useState(false);
   const [hpPulse, setHpPulse] = useState(false);
-  
+
   const [enemyHitFlash, setEnemyHitFlash] = useState(false);
   const [enemyHpPulse, setEnemyHpPulse] = useState(false);
   const [enemyHealFlash, setEnemyHealFlash] = useState(false);
@@ -354,7 +355,7 @@ export default function Game({
   // Compute my name safely
   const myName = me?.username ? safeUsername(me.username) : "YOU";
   // Compute opponent name safely
-  const opponentName = mode === "boss" ? "BOSS ENTITY" : getOpponentName(me, matchInfo);
+  const opponentName = mode === "boss" ? (bossId === "boss_sans" ? "JUDGEMENT WRAITH" : "BOSS ENTITY") : getOpponentName(me, matchInfo);
 
   // Compute timer text - use frozen endAt timestamp if match has ended
   const shouldShowTimer = phase === PHASE.PLAYING || phase === PHASE.MATCH_OVER || phase === PHASE.SUMMARY;
@@ -368,6 +369,12 @@ export default function Game({
     } else {
       survivalMs = Math.max(0, survivalMs - radState.bossPauseTotal);
     }
+  }
+
+  const isStandaloneSans = mode === "boss" && bossId === "boss_sans";
+  if (isStandaloneSans) {
+    const timeSpent = Math.max(0, effectiveNow - surviveStart);
+    survivalMs = Math.max(0, 30000 - timeSpent);
   }
 
   const timerText = fmtMs(survivalMs);
@@ -590,7 +597,7 @@ export default function Game({
     const down = (e) => {
       // Guarantee audio context unlocks on first keypress (critical for instant-start modes like Boss and TimeTrial)
       unlockAudio();
-      
+
       const k = e.key.toLowerCase();
       if (["arrowup", "arrowdown", "arrowleft", "arrowright", " "].includes(k)) {
         e.preventDefault();
@@ -764,8 +771,8 @@ export default function Game({
       try {
         console.log("[game:hpInit]", hpMap);
         if (enemySocketId && hpMap[enemySocketId] !== undefined) {
-           setEnemyHp(hpMap[enemySocketId]);
-           prevEnemyHpRef.current = hpMap[enemySocketId];
+          setEnemyHp(hpMap[enemySocketId]);
+          prevEnemyHpRef.current = hpMap[enemySocketId];
         }
       } catch (err) {
         console.error("[game:hpInit] error:", err);
@@ -805,7 +812,7 @@ export default function Game({
     socket.on("radiance:resumeNormal", ({ resumeAt }) => {
       const delay = Math.max(0, (resumeAt || Date.now()) - Date.now());
       setTimeout(() => {
-         setRadianceWaiting(false);
+        setRadianceWaiting(false);
       }, delay);
     });
 
@@ -1360,6 +1367,7 @@ export default function Game({
       // Fast-forward script time for standalone Bosses mode to trigger phases instantly
       if (mode === "boss") {
         if (bossId === "boss_base" && elapsedMs < 30000) elapsedMs += 30000;
+        if (bossId === "boss_sans" && elapsedMs < 30000) elapsedMs += 30000;
         if (bossId === "boss_radiance" && elapsedMs < 90000) elapsedMs += 90000;
       }
 
@@ -1525,15 +1533,15 @@ export default function Game({
 
       // Ranked Radiance Wait Trigger - If mode is ranked, cap phase to 60s exactly
       if (mode === "ranked" && rad.active && !rad.defeated && elapsedMs > rad.bossStartMs + 60000) {
-          rad.defeated = true; // Auto-pass
-          rad.bossDeathAnimUntil = Date.now() + 1000;
+        rad.defeated = true; // Auto-pass
+        rad.bossDeathAnimUntil = Date.now() + 1000;
       }
 
       // Emit ranked wait cleanly exactly once when boss dies / phase passes
       if (mode === "ranked" && rad.defeated && !radianceRankedFinishedRef.current) {
-         radianceRankedFinishedRef.current = true;
-         // Send off to backend that we are finished
-         socket.emit("radiance:finished", { roomId: roomIdRef.current });
+        radianceRankedFinishedRef.current = true;
+        // Send off to backend that we are finished
+        socket.emit("radiance:finished", { roomId: roomIdRef.current });
       }
 
       // Cleanup post-defeat to resume normal gameplay
@@ -1648,7 +1656,7 @@ export default function Game({
         // Emit HP update to server (or locally for timeTrial/boss)
         if (mode === "timeTrial" || mode === "boss") {
           if (nextHp === 0) {
-            endMatch(socket.id);
+            endMatch("environment"); // "environment" ensures iAmWinner resolves to false
           }
         } else {
           socket.emit("game:hp", { roomId: roomIdRef.current, hp: nextHp });
@@ -1827,6 +1835,8 @@ export default function Game({
       if (bossId === "boss_radiance" && rad.defeated) won = true;
       // Base Boss victory (Expires naturally)
       if (bossId === "boss_base" && bossRef.current && bossRef.current.state === "DONE") won = true;
+      // Sans Boss victory (Expires after exactly 30s survival)
+      if (bossId === "boss_sans" && (now - surviveStartRef.current >= 30000)) won = true;
 
       if (won) {
         setWinnerId(myId);
@@ -2304,16 +2314,16 @@ export default function Game({
       // ASCENSION GLOW
       ctx.fillStyle = `rgba(255, 230, 180, ${0.15 + 0.1 * Math.sin(nowMs / 800)})`;
       ctx.fillRect(0, 0, w, h);
-      
+
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      
+
       ctx.shadowColor = "gold";
       ctx.shadowBlur = 30;
       ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
       ctx.font = "900 52px monospace";
       ctx.fillText("RADIANCE DEFEATED", w / 2, h / 2 - 30);
-      
+
       ctx.shadowBlur = 10;
       ctx.fillStyle = "rgba(200, 200, 200, 0.8)";
       ctx.font = "600 24px monospace";
@@ -2322,7 +2332,7 @@ export default function Game({
       const dots = ".".repeat((Math.floor(nowMs / 400) % 4));
       ctx.textAlign = "left";
       ctx.fillText(dots, w / 2 + 150, h / 2 + 40);
-      
+
       ctx.shadowBlur = 0;
     }
 
@@ -2430,7 +2440,7 @@ export default function Game({
             myName={myName}
             oppName={opponentName}
             hp={hp}
-            enemyHp={enemyHp}
+            enemyHp={isStandaloneSans ? 100 : enemyHp}
             timerText={timerText}
             hpHitPulse={hpPulse}
             enemyHitFlash={enemyHitFlash}
@@ -2440,6 +2450,7 @@ export default function Game({
             guardStatus={guardStatus}
             corruptHealRem={Math.max(0, (corruptHealUntilRef.current - nowMs) / 1000)}
             isCompetitive={vsMode === "ranked" || vsMode === "friend"}
+            isStandaloneSans={isStandaloneSans}
           />
 
           {/* Menu Phase: Top HUD */}

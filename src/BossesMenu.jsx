@@ -8,7 +8,12 @@ const BOSS_DATA = [
     description: "A being of pure, blinding light.",
     icon: "☀",
   },
-  // We can easily add more here later
+  {
+    id: "boss_sans",
+    name: "JUDGEMENT WRAITH",
+    description: "A skeletal force of impossible pressure, blasters, and bone storms.",
+    icon: "💀",
+  },
 ];
 
 export default function BossesMenu({ me, token, onBack, onStartBoss }) {
@@ -57,24 +62,22 @@ export default function BossesMenu({ me, token, onBack, onStartBoss }) {
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {BOSS_DATA.map((boss) => {
-            const isUnlocked = unlockedIds.includes(boss.id);
+            const isUnlocked = unlockedIds.includes(boss.id) || (boss.id === "boss_sans" && unlockedIds.includes("boss_base"));
 
             return (
               <div
                 key={boss.id}
-                className={`border rounded-xl p-5 flex flex-col justify-between transition ${
-                  isUnlocked
+                className={`border rounded-xl p-5 flex flex-col justify-between transition ${isUnlocked
                     ? "border-white/60 bg-black hover:border-white shadow-lg shadow-white/5"
                     : "border-white/10 bg-white/5 opacity-70"
-                }`}
+                  }`}
               >
                 <div className="flex items-start gap-4">
                   <div
-                    className={`w-12 h-12 flex items-center justify-center rounded-lg text-2xl border ${
-                      isUnlocked
+                    className={`w-12 h-12 flex items-center justify-center rounded-lg text-2xl border ${isUnlocked
                         ? "border-white/40 bg-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.2)]"
                         : "border-white/10 bg-black text-white/30"
-                    }`}
+                      }`}
                   >
                     {isUnlocked ? boss.icon : "🔒"}
                   </div>
@@ -90,11 +93,10 @@ export default function BossesMenu({ me, token, onBack, onStartBoss }) {
 
                 <div className="mt-6 flex justify-between items-center">
                   <span
-                    className={`text-xs font-bold px-2 py-1 rounded ${
-                      isUnlocked
+                    className={`text-xs font-bold px-2 py-1 rounded ${isUnlocked
                         ? "bg-green-900/40 text-green-400 border border-green-500/30"
                         : "bg-red-900/30 text-red-500/60 border border-red-500/20"
-                    }`}
+                      }`}
                   >
                     {isUnlocked ? "UNLOCKED" : "LOCKED"}
                   </span>

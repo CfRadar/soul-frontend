@@ -252,6 +252,14 @@ export default function Game({
   const playerRef = useRef({ x: 0, y: 0, r: 10 });
   const bulletsRef = useRef([]);
   const spawnRef = useRef({ nextSpawnAtMs: 0 });
+  const bossRef = useRef({
+    state: "IDLE",
+    animTime: 0,
+    projectiles: [],
+    lasers: [],
+    nextAttackMs: 0,
+    attackCount: 0,
+  });
 
   const shakeRef = useRef({ until: 0, amp: 0 });
 
@@ -288,6 +296,54 @@ export default function Game({
     const t = setInterval(() => setNowMs(Date.now()), 100);
     return () => clearInterval(t);
   }, [phase]);
+
+  function playBossWarningSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(80, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(20, ctx.currentTime + 1.2);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 1.2);
+    } catch {}
+  }
+
+  function playLaserChargeSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      osc.frequency.linearRampToValueAtTime(800, ctx.currentTime + 0.6);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 0.6);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.6);
+    } catch {}
+  }
+
+  function playLaserFireSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(200, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.4);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(); osc.stop(ctx.currentTime + 0.4);
+    } catch {}
+  }
 
   function unlockAudio() {
     try {
@@ -601,6 +657,14 @@ export default function Game({
     setHpPulse(false);
     bulletsRef.current = [];
     spawnRef.current = { nextSpawnAtMs: 0 };
+    bossRef.current = {
+      state: "IDLE",
+      animTime: 0,
+      projectiles: [],
+      lasers: [],
+      nextAttackMs: 0,
+      attackCount: 0,
+    };
     lastHitAtRef.current = -9999;
     prevHpRef.current = 100;
     
@@ -802,6 +866,107 @@ export default function Game({
     return now >= guardCdUntilRef.current;
   }
 
+  function updateBoss(w, h, dt, elapsedMs) {
+    const boss = bossRef.current;
+    const p = playerRef.current;
+    boss.animTime += dt;
+
+    if (elapsedMs >= boss.nextAttackMs) {
+      boss.attackCount++;
+      const rand = rngRef.current;
+      const attackType = Math.floor(rand() * 4);
+      
+      if (attackType === 0) {
+         const isHoriz = rand() > 0.5;
+         const gapSize = 140;
+         const gapStart = 40 + rand() * (isHoriz ? h - 220 : w - 220);
+         const speed = 250;
+         const fromLeftOrTop = rand() > 0.5;
+         
+         const count = isHoriz ? h / 35 : w / 35;
+         for (let i = 0; i <= count; i++) {
+            const pos = i * 35;
+            if (pos > gapStart && pos < gapStart + gapSize) continue;
+            boss.projectiles.push({
+               type: 'bone',
+               x: isHoriz ? (fromLeftOrTop ? -30 : w + 30) : pos,
+               y: isHoriz ? pos : (fromLeftOrTop ? -30 : h + 30),
+               vx: isHoriz ? (fromLeftOrTop ? speed : -speed) : 0,
+               vy: isHoriz ? 0 : (fromLeftOrTop ? speed : -speed),
+               r: 12,
+            });
+         }
+      } else if (attackType === 1) {
+         const isHoriz = rand() > 0.5;
+         boss.lasers.push({
+           x: isHoriz ? w/2 : p.x,
+           y: isHoriz ? p.y : h/2,
+           isHoriz,
+           chargeTime: 0.8,
+           activeTime: 0.3,
+           elapsed: 0,
+           thick: 90,
+         });
+         playLaserChargeSound();
+      } else if (attackType === 2) {
+         const cx = w / 2;
+         const cy = h / 2;
+         const numBullets = 18;
+         const angleOffset = rand() * Math.PI * 2;
+         for (let i = 0; i < numBullets; i++) {
+           boss.projectiles.push({
+             type: 'ring',
+             cx, cy,
+             angle: angleOffset + (i / numBullets) * Math.PI * 2,
+             radius: 500,
+             r: 8,
+             speed: 1.2,
+             contractSpeed: 100
+           });
+         }
+      } else if (attackType === 3) {
+         const shiftX = (rand() - 0.5) * 100;
+         const shiftY = (rand() - 0.5) * 100;
+         boss.lasers.push({ x: p.x + shiftX, y: h/2, isHoriz: false, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
+         boss.lasers.push({ x: w/2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, thick: 60 });
+         playLaserChargeSound();
+      }
+      
+      boss.nextAttackMs = Math.max(elapsedMs + 2200, elapsedMs + 1000 + rand() * 1200);
+      if (attackType === 3 || attackType === 1) boss.nextAttackMs -= 400;
+    }
+
+    for (let i = boss.projectiles.length - 1; i >= 0; i--) {
+       const pr = boss.projectiles[i];
+       if (pr.type === 'bone') {
+          pr.x += pr.vx * dt;
+          pr.y += pr.vy * dt;
+          if (pr.x < -100 || pr.x > w + 100 || pr.y < -100 || pr.y > h + 100) boss.projectiles.splice(i, 1);
+       } else if (pr.type === 'ring') {
+          pr.angle += pr.speed * dt;
+          pr.radius -= pr.contractSpeed * dt;
+          pr.x = pr.cx + Math.cos(pr.angle) * pr.radius;
+          pr.y = pr.cy + Math.sin(pr.angle) * pr.radius;
+          if (pr.radius <= 15) boss.projectiles.splice(i, 1);
+       }
+    }
+
+    for (let i = boss.lasers.length - 1; i >= 0; i--) {
+       const L = boss.lasers[i];
+       const wasCharging = L.elapsed < L.chargeTime;
+       L.elapsed += dt;
+       const isCharging = L.elapsed < L.chargeTime;
+       
+       if (wasCharging && !isCharging) {
+           playLaserFireSound();
+           addShake(18, 200);
+       }
+       if (L.elapsed >= L.chargeTime + L.activeTime) {
+           boss.lasers.splice(i, 1);
+       }
+    }
+  }
+
   function loop() {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -834,7 +999,6 @@ export default function Game({
     const p = playerRef.current;
     p.x = clamp(p.x + ax * speed * dt, 18, w - 18);
     p.y = clamp(p.y + ay * speed * dt, 18, h - 18);
-
     // Calculate difficulty factor: 0 at start, 1 at 120 seconds (slower progression)
     let difficulty = 0;
     const base = surviveStartRef.current;
@@ -842,15 +1006,40 @@ export default function Game({
       const elapsedMs = now - base;
       difficulty = clamp(elapsedMs / 120000, 0, 1);
 
+      const boss = bossRef.current;
+      if (boss.state === "IDLE" && elapsedMs >= 30000) {
+        boss.state = "WARNING";
+        bulletsRef.current = []; // clear existing bullets cleanly
+        addShake(20, 1500);
+        playBossWarningSound();
+      } else if (boss.state === "WARNING" && elapsedMs >= 33000) {
+        boss.state = "ACTIVE";
+        boss.nextAttackMs = elapsedMs + 1000;
+      } else if (boss.state === "ACTIVE" && elapsedMs >= 63000) {
+        boss.state = "DONE";
+        boss.projectiles = [];
+        boss.lasers = [];
+        spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // brief pause after boss
+        addShake(15, 500);
+      }
+
+      const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE";
+
       let guard = 0;
       while (elapsedMs >= spawnRef.current.nextSpawnAtMs && guard < 50) {
-        spawnBullets(w, h, difficulty);
+        if (!isBossTime) {
+          spawnBullets(w, h, difficulty);
+        }
         const rand = rngRef.current;
         // Scale gap: starts at 800ms, decreases to 500ms at max difficulty (slower decrease)
         let gap = 800 - difficulty * 300;
         gap = Math.max(350, gap);
         spawnRef.current.nextSpawnAtMs += gap;
         guard++;
+      }
+
+      if (boss.state === "ACTIVE") {
+        updateBoss(w, h, dt, elapsedMs);
       }
     }
 
@@ -865,62 +1054,98 @@ export default function Game({
       }
     }
 
-const invincible = isGuardActive(now) || isIFrameActive(now);
-      if (!invincible) {
-      for (let i = 0; i < bullets.length; i++) {
-        const b = bullets[i];
-        const dx = b.x - p.x;
-        const dy = b.y - p.y;
-        const dist = Math.hypot(dx, dy);
-        const hitRadius = p.r + b.r;
+    function applyDamage(dmg, knockbackSource) {
+      lastHitAtRef.current = now;
+      addShake(12, 160);
+      playHitSound();
 
-        if (dist < hitRadius) {
-          lastHitAtRef.current = now;
+      // Trigger hit flash and pulse animation
+      setHitFlash(true);
+      setHpPulse(true);
+      setTimeout(() => setHitFlash(false), 150);
+      setTimeout(() => setHpPulse(false), 150);
 
-          addShake(12, 160);
-          playHitSound();
-
-          // Trigger hit flash and pulse animation
-          setHitFlash(true);
+      setHp((old) => {
+        const nextHp = Math.max(0, old - dmg);
+        
+        // Check if HP decreased for animation
+        if (nextHp < prevHpRef.current) {
           setHpPulse(true);
-          setTimeout(() => setHitFlash(false), 150);
           setTimeout(() => setHpPulse(false), 150);
-
-          setHp((old) => {
-            const nextHp = Math.max(0, old - 12);
-            
-            // Check if HP decreased for animation
-            if (nextHp < prevHpRef.current) {
-              setHpPulse(true);
-              setTimeout(() => setHpPulse(false), 150);
-            }
-            prevHpRef.current = nextHp;
-            
-            // Emit HP update to server (or locally for timeTrial)
-            if (mode === "timeTrial") {
-              // Time Trial: no socket, just track locally
-              if (nextHp === 0) {
-                // End match locally for time trial
-                endMatch(socket.id);
-              }
-            } else {
-              // Ranked/Friend: use sockets
-              socket.emit("game:hp", { roomId: roomIdRef.current, hp: nextHp });
-              if (nextHp === 0) {
-                socket.emit("game:death", { roomId: roomIdRef.current });
-              }
-            }
-            return nextHp;
-          });
-
-          const push = 10;
-          b.x += (dx / (dist || 1)) * push;
-          b.y += (dy / (dist || 1)) * push;
-          break;
         }
+        prevHpRef.current = nextHp;
+        
+        // Emit HP update to server (or locally for timeTrial)
+        if (mode === "timeTrial") {
+          if (nextHp === 0) {
+            endMatch(socket.id);
+          }
+        } else {
+          socket.emit("game:hp", { roomId: roomIdRef.current, hp: nextHp });
+          if (nextHp === 0) {
+            socket.emit("game:death", { roomId: roomIdRef.current });
+          }
+        }
+        return nextHp;
+      });
+
+      if (knockbackSource) {
+         const dx = knockbackSource.x - p.x;
+         const dy = knockbackSource.y - p.y;
+         const dist = Math.hypot(dx, dy) || 1;
+         const push = 10;
+         if (knockbackSource.r !== undefined) {
+           knockbackSource.x += (dx / dist) * push;
+           knockbackSource.y += (dy / dist) * push;
+         }
       }
     }
 
+    const invincible = isGuardActive(now) || isIFrameActive(now);
+    if (!invincible) {
+      let tookHit = false;
+
+      for (let i = 0; i < bullets.length; i++) {
+        const b = bullets[i];
+        const dist = Math.hypot(b.x - p.x, b.y - p.y);
+        const hitRadius = p.r + b.r;
+        if (dist < hitRadius) {
+          tookHit = true;
+          applyDamage(12, b);
+          break;
+        }
+      }
+
+      if (!tookHit && bossRef.current) {
+         const boss = bossRef.current;
+         for (let i = 0; i < boss.projectiles.length; i++) {
+            const pr = boss.projectiles[i];
+            const dist = Math.hypot(pr.x - p.x, pr.y - p.y);
+            if (dist < p.r + pr.r - 2) {
+               tookHit = true;
+               applyDamage(12, pr);
+               break;
+            }
+         }
+      }
+
+      if (!tookHit && bossRef.current) {
+         const boss = bossRef.current;
+         for (let i = 0; i < boss.lasers.length; i++) {
+            const L = boss.lasers[i];
+            if (L.elapsed > L.chargeTime) {
+               const hit = L.isHoriz 
+                 ? Math.abs(p.y - L.y) < L.thick/2 + p.r - 2
+                 : Math.abs(p.x - L.x) < L.thick/2 + p.r - 2;
+               if (hit) {
+                  tookHit = true;
+                  applyDamage(20, null);
+                  break;
+               }
+            }
+         }
+      }
+    }
     ctx.clearRect(0, 0, w, h);
 
     // screen shake
@@ -975,6 +1200,89 @@ const invincible = isGuardActive(now) || isIFrameActive(now);
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
       ctx.stroke();
+    }
+
+    const boss = bossRef.current;
+    if (boss && boss.state === "WARNING") {
+       ctx.fillStyle = "rgba(255, 0, 0, 0.1)";
+       ctx.fillRect(0, 0, w, h);
+       
+       const flash = Math.floor(Date.now() / 150) % 2 === 0;
+       if (flash) {
+         ctx.fillStyle = "white";
+         ctx.font = "900 64px monospace";
+         ctx.textAlign = "center";
+         ctx.textBaseline = "middle";
+         ctx.fillText("WARNING", w/2, h/2 - 40);
+         ctx.fillStyle = "red";
+         ctx.font = "900 48px monospace";
+         ctx.fillText("BOSS INCOMING", w/2, h/2 + 30);
+       }
+    }
+
+    if (boss && boss.state === "ACTIVE") {
+       ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
+       ctx.font = "bold 16px monospace";
+       ctx.textAlign = "center";
+       ctx.fillText("BOSS PHASE", w/2, 30);
+
+       const bx = w/2;
+       const by = 80 + Math.sin(boss.animTime * 3) * 10;
+       
+       ctx.fillStyle = "white";
+       ctx.beginPath();
+       ctx.arc(bx, by, 30, 0, Math.PI * 2);
+       ctx.fill();
+       
+       ctx.fillStyle = "black";
+       ctx.beginPath();
+       ctx.arc(bx - 12, by - 5, 8, 0, Math.PI * 2);
+       ctx.arc(bx + 12, by - 5, 8, 0, Math.PI * 2);
+       ctx.fill();
+       
+       if (Math.random() > 0.95) {
+          ctx.fillStyle = "red";
+          ctx.beginPath();
+          ctx.arc(bx - 12, by - 5, 3, 0, Math.PI*2);
+          ctx.fill();
+       }
+
+       ctx.strokeStyle = "black";
+       ctx.lineWidth = 4;
+       ctx.beginPath();
+       ctx.arc(bx, by + 5, 12, 0.2, Math.PI - 0.2);
+       ctx.stroke();
+
+       for (const pr of boss.projectiles) {
+          ctx.fillStyle = "white";
+          ctx.beginPath();
+          ctx.arc(pr.x, pr.y, pr.r, 0, Math.PI * 2);
+          ctx.fill();
+       }
+
+       for (const L of boss.lasers) {
+          if (L.elapsed < L.chargeTime) {
+             ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
+             if (L.isHoriz) {
+                 ctx.fillRect(0, L.y - 2, w, 4);
+             } else {
+                 ctx.fillRect(L.x - 2, 0, 4, h);
+             }
+          } else {
+             const activeRatio = (L.elapsed - L.chargeTime) / L.activeTime;
+             const fade = 1 - activeRatio;
+             ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
+             ctx.shadowColor = "red";
+             ctx.shadowBlur = 15;
+             const th = L.thick * (1 - activeRatio * 0.2);
+             if (L.isHoriz) {
+                 ctx.fillRect(0, L.y - th/2, w, th);
+             } else {
+                 ctx.fillRect(L.x - th/2, 0, th, h);
+             }
+             ctx.shadowBlur = 0;
+          }
+       }
     }
 
     // Draw guard ring if active

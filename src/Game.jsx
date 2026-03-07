@@ -4,6 +4,7 @@ import { socket } from "./socket";
 import { submitTimeTrial, unlockBoss } from "./api";
 import RankBadge from "./ui/RankBadge";
 import RankChangeToast from "./ui/RankChangeToast";
+import radianceMusicAsset from "../assets/music/RadiantBossFight.mp3";
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
@@ -228,6 +229,94 @@ export default function Game({
   const phaseRef = useRef(PHASE.MENU);
   const roomIdRef = useRef(null);
 
+  // ====== Radiance Boss Music Setup ======
+  const radianceMusicRef = useRef(null);
+  const radianceFadeRef = useRef(null);
+  const radianceMusicStartedRef = useRef(false);
+
+  useEffect(() => {
+    const audio = new Audio(radianceMusicAsset);
+    audio.loop = true;
+    audio.volume = 0;
+    audio.preload = "auto";
+    radianceMusicRef.current = audio;
+
+    return () => {
+      ensureRadianceMusicStoppedImmediately();
+      radianceMusicRef.current = null;
+    };
+  }, []);
+
+  function startRadianceMusic() {
+    if (!radianceMusicRef.current || radianceMusicStartedRef.current) return;
+    radianceMusicStartedRef.current = true;
+    
+    const audio = radianceMusicRef.current;
+    
+    // Clear any existing fades
+    if (radianceFadeRef.current) clearInterval(radianceFadeRef.current);
+    
+    audio.volume = 0.02;
+    audio.play().catch(() => {});
+    
+    // Fade in over 5s to 0.4
+    fadeAudioTo(audio, 0.4, 5000);
+  }
+
+  function fadeAudioTo(audio, targetVolume, durationMs, onDone) {
+    if (radianceFadeRef.current) clearInterval(radianceFadeRef.current);
+    
+    const startVol = audio.volume;
+    const diff = targetVolume - startVol;
+    const steps = 20;
+    const stepTime = durationMs / steps;
+    const volStep = diff / steps;
+    
+    let currentStep = 0;
+    radianceFadeRef.current = setInterval(() => {
+      currentStep++;
+      let nextVol = startVol + (volStep * currentStep);
+      nextVol = clamp(nextVol, 0, 1);
+      
+      try { audio.volume = nextVol; } catch (e) {}
+
+      if (currentStep >= steps) {
+        clearInterval(radianceFadeRef.current);
+        radianceFadeRef.current = null;
+        if (targetVolume === 0) {
+          audio.pause();
+        }
+        if (onDone) onDone();
+      }
+    }, stepTime);
+  }
+
+  function stopRadianceMusic() {
+    if (!radianceMusicRef.current || !radianceMusicStartedRef.current) return;
+    radianceMusicStartedRef.current = false;
+    fadeAudioTo(radianceMusicRef.current, 0, 2000, () => {
+      if (radianceMusicRef.current) {
+        radianceMusicRef.current.pause();
+        radianceMusicRef.current.currentTime = 0;
+      }
+    });
+  }
+
+  function ensureRadianceMusicStoppedImmediately() {
+    radianceMusicStartedRef.current = false;
+    if (radianceFadeRef.current) {
+      clearInterval(radianceFadeRef.current);
+      radianceFadeRef.current = null;
+    }
+    const audio = radianceMusicRef.current;
+    if (audio) {
+      try { audio.volume = 0; } catch (e) {}
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  }
+
+
   const surviveStartRef = useRef(0);
   const endAtRef = useRef(null); // Frozen timestamp when match ends
 
@@ -268,6 +357,13 @@ export default function Game({
     socket.connected ? "connected" : "connecting..."
   );
   const [phase, setPhase] = useState(PHASE.MENU);
+
+  // hard clean music if unmounted or phase changes away from PLAYING
+  useEffect(() => {
+    if (phase !== PHASE.PLAYING) {
+      ensureRadianceMusicStoppedImmediately();
+    }
+  }, [phase]);
 
   const [roomId, setRoomId] = useState(null);
   const [startAt, setStartAt] = useState(null);
@@ -823,12 +919,17 @@ export default function Game({
 
     socket.on("radiance:wait", () => {
       setRadianceWaiting(true);
+      // Wait phase: slightly reduce volume
+      if (radianceMusicRef.current && radianceMusicStartedRef.current) {
+        fadeAudioTo(radianceMusicRef.current, 0.25, 1000);
+      }
     });
 
     socket.on("radiance:resumeNormal", ({ resumeAt }) => {
       const delay = Math.max(0, (resumeAt || Date.now()) - Date.now());
       setTimeout(() => {
         setRadianceWaiting(false);
+        stopRadianceMusic(); // Clean fade out on resume
       }, delay);
     });
 
@@ -1489,6 +1590,10 @@ export default function Game({
       } else if (rad.warning && elapsedMs >= rad.warningStartMs + 3000) {
         rad.warning = false;
         rad.active = true;
+        
+        // Custom start music cleanly here exactly once
+        startRadianceMusic();
+        
         rad.bossStartMs = elapsedMs;
         rad.phaseTimeMs = elapsedMs;
         rad.nextAttackAtMs = elapsedMs + 1500;
@@ -1622,6 +1727,8 @@ export default function Game({
       // Cleanup post-defeat to resume normal gameplay
       if (rad.defeated && rad.active && Date.now() > rad.bossDeathAnimUntil && !radianceWaiting) {
         rad.active = false;
+        stopRadianceMusic();
+        
         // Calculate the exact amount of time the Radiance fight officially took up to subtract from universal playtime
         rad.bossPauseTotal = (elapsedMs - rad.bossPauseStart);
         spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // Brief pause before resuming bullets
@@ -1855,11 +1962,13 @@ export default function Game({
         // Emit HP update to server (or locally for timeTrial/boss)
         if (mode === "timeTrial" || mode === "boss") {
           if (nextHp === 0) {
+            ensureRadianceMusicStoppedImmediately();
             endMatch("environment"); // "environment" ensures iAmWinner resolves to false
           }
         } else {
           socket.emit("game:hp", { roomId: roomIdRef.current, hp: nextHp });
           if (nextHp === 0) {
+            ensureRadianceMusicStoppedImmediately();
             socket.emit("game:death", { roomId: roomIdRef.current });
           }
         }
@@ -2771,7 +2880,10 @@ export default function Game({
                   <span className="text-white">Shift</span> slow
                 </div>
                 <button
-                  onClick={exitToMenu}
+                  onClick={() => {
+                    ensureRadianceMusicStoppedImmediately();
+                    exitToMenu();
+                  }}
                   className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
                 >
                   Exit
@@ -2792,7 +2904,10 @@ export default function Game({
                   <span className="text-white">Shift</span> slow
                 </div>
                 <button
-                  onClick={exitToMenu}
+                  onClick={() => {
+                    ensureRadianceMusicStoppedImmediately();
+                    exitToMenu();
+                  }}
                   className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
                 >
                   Exit

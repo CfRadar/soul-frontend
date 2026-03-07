@@ -176,7 +176,7 @@ function HeaderBar({
         </span>
       </div>
 
-      {/* Right: HP + Guard - w-[38%] flex justify-end gap-6 */}
+      {/* Right: HP */}
       <div className="w-[38%] flex justify-end items-center gap-6">
         {/* Opponent HP Display (Competitive) */}
         {showEnemyHp && oppName && (
@@ -190,7 +190,7 @@ function HeaderBar({
 
         {/* My HP Display */}
         <div className="flex items-center gap-2 border-l border-white/20 pl-4">
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center relative">
             {isCorruptActive && (
               <div className="text-[10px] font-bold text-purple-400 font-mono bg-purple-900/40 px-1 rounded animate-pulse absolute -top-4">
                 REV: {corruptHealRem.toFixed(1)}s
@@ -202,9 +202,6 @@ function HeaderBar({
               </span>
               <span className="ml-1 text-xs text-white/50 font-mono">HP</span>
             </div>
-          </div>
-          <div className="text-xs text-white/70 font-mono bg-white/10 px-2 py-1 rounded hidden sm:block">
-            GUARD: <span className={guardStatus === "READY" ? "text-lime-400" : "text-white/60"}>{guardStatus}</span>
           </div>
         </div>
       </div>
@@ -3808,81 +3805,105 @@ export default function Game({
             enemyHpPulse={enemyHpPulse}
             enemyHealFlash={enemyHealFlash}
             phase={phase}
-            guardStatus={guardStatus}
             corruptHealRem={Math.max(0, (corruptHealUntilRef.current - nowMs) / 1000)}
             isCompetitive={vsMode === "ranked" || vsMode === "friend"}
             isStandaloneSans={isStandaloneSans}
           />
 
-          {/* Menu Phase: Top HUD */}
-          {phase === PHASE.MENU && (
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="text-sm">
-                  <div className="text-white/60 text-xs">HP</div>
-                  <div className="font-semibold">{hp}</div>
-                </div>
-                <div className="h-8 w-px bg-white/20" />
-                <div className="text-sm">
-                  <div className="text-white/60 text-xs">Survival</div>
-                  <div className="font-semibold">0:00</div>
-                </div>
+        {/* Menu Phase: Top HUD */}
+        {phase === PHASE.MENU && (
+           <div className="flex items-center justify-between px-4 py-3 border-b border-white/20">
+             <div className="flex items-center gap-3">
+               <div className="text-sm">
+                 <div className="text-white/60 text-xs">HP</div>
+                 <div className="font-semibold">{hp}</div>
+               </div>
+               <div className="h-8 w-px bg-white/20" />
+               <div className="text-sm">
+                 <div className="text-white/60 text-xs">Survival</div>
+                 <div className="font-semibold">0:00</div>
+               </div>
+             </div>
+             <div className="flex items-center gap-2">
+               <button
+                 onClick={() => {
+                   ensureRadianceMusicStoppedImmediately();
+                   exitToMenu();
+                 }}
+                 className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
+               >
+                 Exit
+               </button>
+             </div>
+           </div>
+        )}
+
+        {/* Non-PLAYING phases: show room info when applicable */}
+        {phase !== PHASE.PLAYING && phase !== PHASE.MENU && (
+           <div className="flex items-center justify-between px-4 py-2 border-b border-white/20 bg-black/40">
+             <div className="text-xs text-white/60">
+               Room: <span className="text-white/80 font-mono">{roomId ? roomId.slice(0, 20) + "…" : "—"}</span>
+             </div>
+             <div className="flex items-center gap-2">
+               <button
+                 onClick={() => {
+                   ensureRadianceMusicStoppedImmediately();
+                   exitToMenu();
+                 }}
+                 className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
+               >
+                 Exit
+               </button>
+             </div>
+           </div>
+        )}
+
+        {/* Main Game Container */}
+        <div className="relative w-full rounded-2xl border border-white/30 bg-black shadow-xl overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            width={980}
+            height={540}
+            className="w-full h-auto block max-w-full"
+            style={{ aspectRatio: '980/540' }}
+          />
+
+          {/* Bottom Left: Cooldown HUD */}
+          {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
+            <div className="absolute bottom-6 left-6 flex flex-col gap-2.5 pointer-events-none z-10 w-48">
+              <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${dashRem <= 0 ? 'bg-lime-900/40 border-lime-500/50' : 'bg-black/60 border-white/10'}`}>
+                <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">DASH</span>
+                <span className={`font-mono font-black text-sm ${dashRem <= 0 ? 'text-lime-400 drop-shadow-[0_0_8px_rgba(100,255,100,0.8)]' : 'text-red-400'}`}>
+                  {dashRem <= 0 ? "READY" : (dashRem / 1000).toFixed(1) + "s"}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-white/60">
-                  Controls: <span className="text-white">WASD</span> •{" "}
-                  <span className={`font-semibold ${dashRem <= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    Shift Dash: {dashStatus}
-                  </span>
-                </div>
-                <button
-                  onClick={() => {
-                    ensureRadianceMusicStoppedImmediately();
-                    exitToMenu();
-                  }}
-                  className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
-                >
-                  Exit
-                </button>
+              <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${guardStatus === "READY" ? 'bg-cyan-900/40 border-cyan-500/50' : 'bg-black/60 border-white/10'}`}>
+                <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">GUARD</span>
+                <span className={`font-mono font-black text-sm ${guardStatus === "READY" ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(0,255,255,0.8)]' : 'text-white/40'}`}>
+                  {guardStatus}
+                </span>
               </div>
             </div>
           )}
 
-          {/* Non-PLAYING phases: show room info when applicable */}
-          {phase !== PHASE.PLAYING && phase !== PHASE.MENU && (
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/20 bg-black/40">
-              <div className="text-xs text-white/60">
-                Room: <span className="text-white/80 font-mono">{roomId ? roomId.slice(0, 20) + "…" : "—"}</span>
+          {/* Bottom Right: Controls Legend */}
+          {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
+            <div className="absolute bottom-6 right-6 flex flex-col items-end gap-2 pointer-events-none z-10 text-right opacity-70">
+              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
+                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">MOVE</span>
+                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">WASD</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="text-xs text-white/60">
-                  Controls: <span className="text-white">WASD</span> •{" "}
-                  <span className={`font-semibold ${dashRem <= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    Shift Dash: {dashStatus}
-                  </span>
-                </div>
-                <button
-                  onClick={() => {
-                    ensureRadianceMusicStoppedImmediately();
-                    exitToMenu();
-                  }}
-                  className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
-                >
-                  Exit
-                </button>
+              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
+                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">DASH</span>
+                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SHIFT</span>
+              </div>
+              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
+                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">GUARD</span>
+                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SPACE</span>
               </div>
             </div>
           )}
-
-          {/* Fixed canvas wrapper - px-4 pb-4 */}
-          <div className="px-4 pb-4">
-            <canvas
-              ref={canvasRef}
-              width={980}
-              height={540}
-              className="w-full rounded-xl border border-white/25 bg-black"
-            />
-          </div>
+        </div>
 
           {/* MENU Overlay - not shown for time trial */}
           {phase === PHASE.MENU && mode !== "timeTrial" && (

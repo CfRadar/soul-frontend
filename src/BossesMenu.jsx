@@ -14,6 +14,12 @@ const BOSS_DATA = [
     description: "A skeletal force of impossible pressure, blasters, and bone storms.",
     icon: "💀",
   },
+  {
+    id: "boss_goddess",
+    name: "THE ASCENDED BLADE",
+    description: "An ancient valkyrie awakening from the void with her glowing greatsword.",
+    icon: "⚔️",
+  },
 ];
 
 export default function BossesMenu({ me, token, onBack, onStartBoss }) {
@@ -62,7 +68,9 @@ export default function BossesMenu({ me, token, onBack, onStartBoss }) {
       {!loading && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {BOSS_DATA.map((boss) => {
-            const isUnlocked = unlockedIds.includes(boss.id) || (boss.id === "boss_sans" && unlockedIds.includes("boss_base"));
+            const isUnlocked = unlockedIds.includes(boss.id) || 
+              (boss.id === "boss_sans" && unlockedIds.includes("boss_base")) ||
+              (boss.id === "boss_goddess" && unlockedIds.includes("boss_radiance")); // Optionally unlock her early if radiance unlocked, or require explicit unlock
 
             return (
               <div

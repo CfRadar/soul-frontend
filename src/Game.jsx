@@ -2584,8 +2584,8 @@ export default function Game({
       // Collectible Radiant Orbs
       if (rad.collectibleOrb && !rad.sonicBoomActive) {
         const orb = rad.collectibleOrb;
-        ctx.shadowColor = "white"; ctx.shadowBlur = 15;
-        ctx.fillStyle = "gold";
+        ctx.shadowColor = "lime"; ctx.shadowBlur = 15;
+        ctx.fillStyle = "#22c55e"; // bright green
         ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r + Math.sin(now / 100) * 2, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "white";
         ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r * 0.4, 0, Math.PI * 2); ctx.fill();

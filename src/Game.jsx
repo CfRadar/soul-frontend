@@ -1631,11 +1631,11 @@ export default function Game({
       // Calculate true gameplay elapsedMs by subtracting any time paused by the Radiance boss
       let lrElapsedMs = elapsedMs;
       if (rad.triggered) {
-        if (!rad.defeated) {
+        if (rad.warning || rad.active) {
           // If Radiance is currently active, freeze LR time at the moment Radiance started
           lrElapsedMs = rad.bossPauseStart;
         } else {
-          // If Radiance is defeated, subtract the total time paused from the current elapsedMs
+          // If Radiance is defeated and fully cleaned up, subtract the total time paused from the current elapsedMs
           lrElapsedMs = Math.max(0, elapsedMs - rad.bossPauseTotal);
         }
       }

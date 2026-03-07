@@ -261,50 +261,50 @@ export default function Game({
   function startRadianceMusic() {
     if (!radianceMusicRef.current || radianceMusicStartedRef.current) return;
     radianceMusicStartedRef.current = true;
-
+    
     const audio = radianceMusicRef.current;
-
+    
     // Clear any existing fades
     if (radianceFadeRef.current) clearInterval(radianceFadeRef.current);
-
+    
     audio.volume = 0.02;
-    audio.play().catch(() => { });
-
+    audio.play().catch(() => {});
+    
     fadeAudioTo(audio, 0.4, 5000, radianceFadeRef);
   }
 
   function startGoddessMusic() {
     if (!goddessMusicRef.current || goddessMusicStartedRef.current) return;
     goddessMusicStartedRef.current = true;
-
+    
     const audio = goddessMusicRef.current;
-
+    
     // Clear any existing fades
     if (goddessFadeRef.current) clearInterval(goddessFadeRef.current);
-
+    
     audio.volume = 0.02;
-    audio.play().catch(() => { });
-
+    audio.play().catch(() => {});
+    
     // Fade in over 5s to 0.4
     fadeAudioTo(audio, 0.4, 5000, goddessFadeRef);
   }
 
   function fadeAudioTo(audio, targetVolume, durationMs, reqFadeRef, onDone) {
     if (reqFadeRef.current) clearInterval(reqFadeRef.current);
-
+    
     const startVol = audio.volume;
     const diff = targetVolume - startVol;
     const steps = 20;
     const stepTime = durationMs / steps;
     const volStep = diff / steps;
-
+    
     let currentStep = 0;
     reqFadeRef.current = setInterval(() => {
       currentStep++;
       let nextVol = startVol + (volStep * currentStep);
       nextVol = clamp(nextVol, 0, 1);
-
-      try { audio.volume = nextVol; } catch (e) { }
+      
+      try { audio.volume = nextVol; } catch (e) {}
 
       if (currentStep >= steps) {
         clearInterval(reqFadeRef.current);
@@ -336,7 +336,7 @@ export default function Game({
     }
     const audio = radianceMusicRef.current;
     if (audio) {
-      try { audio.volume = 0; } catch (e) { }
+      try { audio.volume = 0; } catch (e) {}
       audio.pause();
       audio.currentTime = 0;
     }
@@ -361,7 +361,7 @@ export default function Game({
     }
     const audio = goddessMusicRef.current;
     if (audio) {
-      try { audio.volume = 0; } catch (e) { }
+      try { audio.volume = 0; } catch (e) {}
       audio.pause();
       audio.currentTime = 0;
     }
@@ -561,10 +561,10 @@ export default function Game({
   const myName = me?.username ? safeUsername(me.username) : "YOU";
   // Compute opponent name safely
   const opponentName = mode === "boss" ? (
-    bossId === "boss_sans" ? "JUDGEMENT WRAITH" :
+      bossId === "boss_sans" ? "JUDGEMENT WRAITH" : 
       bossId === "boss_goddess" ? "THE ASCENDED BLADE" :
-        bossId === "boss_radiance" ? "RADIANT ASCENDANT" : "BOSS ENTITY"
-  ) : getOpponentName(me, matchInfo);
+      bossId === "boss_radiance" ? "RADIANT ASCENDANT" : "BOSS ENTITY"
+    ) : getOpponentName(me, matchInfo);
 
   // Compute timer text - use frozen endAt timestamp if match has ended
   const shouldShowTimer = phase === PHASE.PLAYING || phase === PHASE.MATCH_OVER || phase === PHASE.SUMMARY;
@@ -836,63 +836,63 @@ export default function Game({
       // Sonic Boom / Shockwave activation (r)
       if (k === "r" && !e.repeat) {
         if (phaseRef.current === PHASE.PLAYING) {
-          const rad = radianceBossRef.current;
-          const god = goddessBossRef.current;
-
-          if (rad.active && rad.orbCharge >= rad.orbChargeMax) {
-            rad.orbCharge = 0;
-            rad.collectibleOrb = null;
-            rad.sonicBoomActive = true;
-            rad.sonicBoomUntil = Date.now() + 500;
-            rad.hp = Math.max(0, rad.hp - 20);
-            addShake(20, 600);
-            playLaserFireSound();
-
-            // Spawn boom visuals
-            radParticlesRef.current.booms.push({ r: 10, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600), life: 0.5, elapsed: 0 });
-            radParticlesRef.current.booms.push({ r: 5, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600) * 0.8, life: 0.6, elapsed: 0, delay: 0.1 });
-
-            // Spawn boss hit sparks
-            const bx = (window.innerWidth || 900) / 2;
-            const by = 120;
-            for (let i = 0; i < 30; i++) {
-              const ang = Math.random() * Math.PI * 2;
-              const spd = 200 + Math.random() * 400;
-              radParticlesRef.current.sparks.push({
-                x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
-                life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
-                color: Math.random() > 0.5 ? "white" : "gold"
-              });
+           const rad = radianceBossRef.current;
+           const god = goddessBossRef.current;
+           
+           if (rad.active && rad.orbCharge >= rad.orbChargeMax) {
+              rad.orbCharge = 0;
+              rad.collectibleOrb = null;
+              rad.sonicBoomActive = true;
+              rad.sonicBoomUntil = Date.now() + 500;
+              rad.hp = Math.max(0, rad.hp - 20);
+              addShake(20, 600);
+              playLaserFireSound();
+    
+              // Spawn boom visuals
+              radParticlesRef.current.booms.push({ r: 10, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600), life: 0.5, elapsed: 0 });
+              radParticlesRef.current.booms.push({ r: 5, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600) * 0.8, life: 0.6, elapsed: 0, delay: 0.1 });
+    
+              // Spawn boss hit sparks
+              const bx = (window.innerWidth || 900) / 2;
+              const by = 120;
+              for (let i = 0; i < 30; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = 200 + Math.random() * 400;
+                radParticlesRef.current.sparks.push({
+                  x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+                  life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
+                  color: Math.random() > 0.5 ? "white" : "gold"
+                });
+              }
+           }
+           
+           if (god.active && god.orbCharge >= god.orbChargeMax) {
+              god.orbCharge = 0;
+              god.collectibleOrb = null;
+              god.hp = Math.max(0, god.hp - 20);
+              // Calculate elapsedMs manually for timeline synchronization
+              const currentElapsed = Date.now() - surviveStartRef.current;
+              // Stagger boss natively for 3 seconds of timeline
+              god.staggeredUntilMs = currentElapsed + 3500;
+              
+              addShake(30, 800);
+              playLaserFireSound();
+              
+              // Emit massive blood-red boom visual natively from player
+              radParticlesRef.current.booms.push({ r: 10, maxR: 1200, life: 0.6, elapsed: 0 });
+              
+              // Spark particles around boss
+              for (let i = 0; i < 30; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const spd = 200 + Math.random() * 400;
+                radParticlesRef.current.sparks.push({
+                  x: god.x, y: god.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+                  life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
+                  color: "white" // Flashing white
+                });
+              }
             }
-          }
-
-          if (god.active && god.orbCharge >= god.orbChargeMax) {
-            god.orbCharge = 0;
-            god.collectibleOrb = null;
-            god.hp = Math.max(0, god.hp - 20);
-            // Calculate elapsedMs manually for timeline synchronization
-            const currentElapsed = Date.now() - surviveStartRef.current;
-            // Stagger boss natively for 3 seconds of timeline
-            god.staggeredUntilMs = currentElapsed + 3500;
-
-            addShake(30, 800);
-            playLaserFireSound();
-
-            // Emit massive blood-red boom visual natively from player
-            radParticlesRef.current.booms.push({ r: 10, maxR: 1200, life: 0.6, elapsed: 0 });
-
-            // Spark particles around boss
-            for (let i = 0; i < 30; i++) {
-              const ang = Math.random() * Math.PI * 2;
-              const spd = 200 + Math.random() * 400;
-              radParticlesRef.current.sparks.push({
-                x: god.x, y: god.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
-                life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
-                color: "white" // Flashing white
-              });
-            }
-          }
-        }
+         }
       }
 
       keysRef.current.add(k);
@@ -1630,7 +1630,7 @@ export default function Game({
     loop._lastNow = now;
 
     const keys = keysRef.current;
-
+    
     // Evaluate base movement axis from keys
     let ax = 0, ay = 0;
     if (keys.has("w") || keys.has("arrowup")) ay -= 1;
@@ -1645,67 +1645,67 @@ export default function Game({
     const speed = 260; // Base speed, slow removed
 
     const p = playerRef.current;
-
+    
     // Dash Mechanics
     const DASH_DURATION = 160;
     const DASH_SPEED = 900;
     const DASH_COOLDOWN = 2000;
-
+    
     if (keys.has("shift") && !dashRef.current.active && now > dashRef.current.cooldownUntil) {
-      // Determine Dash Direction
-      let dx = ax;
-      let dy = ay;
-
-      // If standing still, dash in the direction we were last facing (or default right)
-      if (dx === 0 && dy === 0) {
-        dx = dashRef.current.lastDx || 1;
-        dy = dashRef.current.lastDy || 0;
-      }
-
-      // Normalize dash direction
-      const dLen = Math.hypot(dx, dy) || 1;
-      dx /= dLen;
-      dy /= dLen;
-
-      dashRef.current = {
-        active: true,
-        until: now + DASH_DURATION,
-        cooldownUntil: now + DASH_COOLDOWN,
-        dirX: dx,
-        dirY: dy,
-        lastDx: dx, // cache for static dashes
-        lastDy: dy
-      };
-      playHitSound(); // Optional small sound feedback on dash
+       // Determine Dash Direction
+       let dx = ax;
+       let dy = ay;
+       
+       // If standing still, dash in the direction we were last facing (or default right)
+       if (dx === 0 && dy === 0) {
+          dx = dashRef.current.lastDx || 1;
+          dy = dashRef.current.lastDy || 0;
+       }
+       
+       // Normalize dash direction
+       const dLen = Math.hypot(dx, dy) || 1;
+       dx /= dLen;
+       dy /= dLen;
+       
+       dashRef.current = {
+          active: true,
+          until: now + DASH_DURATION,
+          cooldownUntil: now + DASH_COOLDOWN,
+          dirX: dx,
+          dirY: dy,
+          lastDx: dx, // cache for static dashes
+          lastDy: dy
+       };
+       playHitSound(); // Optional small sound feedback on dash
     } else if (ax !== 0 || ay !== 0) {
-      // Cache last movement direction while walking to use if we dash from a standstill
-      dashRef.current.lastDx = ax;
-      dashRef.current.lastDy = ay;
+       // Cache last movement direction while walking to use if we dash from a standstill
+       dashRef.current.lastDx = ax;
+       dashRef.current.lastDy = ay;
     }
 
     // Apply Movement
     if (dashRef.current.active && now < dashRef.current.until) {
-      // Executing Dash Movement
-      p.x += dashRef.current.dirX * DASH_SPEED * dt;
-      p.y += dashRef.current.dirY * DASH_SPEED * dt;
-
-      // Create trail
-      playerTrailRef.current.push({ x: p.x, y: p.y, lifeMs: 200, maxLifeMs: 200 });
+       // Executing Dash Movement
+       p.x += dashRef.current.dirX * DASH_SPEED * dt;
+       p.y += dashRef.current.dirY * DASH_SPEED * dt;
+       
+       // Create trail
+       playerTrailRef.current.push({ x: p.x, y: p.y, lifeMs: 200, maxLifeMs: 200 });
     } else {
-      // Normal Movement
-      dashRef.current.active = false;
-      p.x += ax * speed * dt;
-      p.y += ay * speed * dt;
+       // Normal Movement
+       dashRef.current.active = false;
+       p.x += ax * speed * dt;
+       p.y += ay * speed * dt;
     }
-
+    
     p.x = clamp(p.x, 18, w - 18);
     p.y = clamp(p.y, 18, h - 18);
-
+    
     // Process Trail Lifetimes
     for (let i = playerTrailRef.current.length - 1; i >= 0; i--) {
-      const tr = playerTrailRef.current[i];
-      tr.lifeMs -= dt * 1000;
-      if (tr.lifeMs <= 0) playerTrailRef.current.splice(i, 1);
+       const tr = playerTrailRef.current[i];
+       tr.lifeMs -= dt * 1000;
+       if (tr.lifeMs <= 0) playerTrailRef.current.splice(i, 1);
     }
     // Calculate difficulty factor: 0 at start, 1 at 120 seconds (slower progression)
     let difficulty = 0;
@@ -1720,9 +1720,9 @@ export default function Game({
         if (bossId === "boss_sans" && elapsedMs < 30000) elapsedMs += 30000;
         if (bossId === "boss_radiance" && elapsedMs < 90000) elapsedMs += 90000;
         if (bossId === "boss_goddess") {
-          laserRoundRef.current.triggered = true;
-          laserRoundRef.current.finished = true;
-          if (elapsedMs < 150000) elapsedMs += 150000;
+           laserRoundRef.current.triggered = true;
+           laserRoundRef.current.finished = true;
+           if (elapsedMs < 150000) elapsedMs += 150000;
         }
       }
 
@@ -1777,10 +1777,10 @@ export default function Game({
       } else if (rad.warning && elapsedMs >= rad.warningStartMs + 3000) {
         rad.warning = false;
         rad.active = true;
-
+        
         // Custom start music cleanly here exactly once
         startRadianceMusic();
-
+        
         rad.bossStartMs = elapsedMs;
         rad.phaseTimeMs = elapsedMs;
         rad.nextAttackAtMs = elapsedMs + 1500;
@@ -1841,7 +1841,7 @@ export default function Game({
           const sp = rad.wallSpikes[i];
           const curElapsed = (elapsedMs - sp.spawnedAtMs) / 1000;
           sp.timer = curElapsed;
-
+          
           if (sp.state === "WARN" && curElapsed > 1.0) {
             sp.state = "EXTEND";
           } else if (sp.state === "EXTEND") {
@@ -1858,10 +1858,10 @@ export default function Game({
           const prevElapsed = L.elapsed;
           const curElapsed = (elapsedMs - L.spawnedAtMs) / 1000;
           L.elapsed = curElapsed;
-
+          
           const wasCharging = prevElapsed < L.chargeTime;
           const isCharging = curElapsed < L.chargeTime;
-
+          
           if (wasCharging && !isCharging) {
             playLaserFireSound();
             addShake(12, 200);
@@ -1947,7 +1947,7 @@ export default function Game({
       if (rad.defeated && rad.active && Date.now() > rad.bossDeathAnimUntil && !radianceWaiting) {
         rad.active = false;
         stopRadianceMusic();
-
+        
         // Calculate the exact amount of time the Radiance fight officially took up to subtract from universal playtime
         rad.bossPauseTotal = (elapsedMs - rad.bossPauseStart);
         spawnRef.current.nextSpawnAtMs = elapsedMs + 1000; // Brief pause before resuming bullets
@@ -1972,10 +1972,10 @@ export default function Game({
         lr.warning = true;
         // Lock in the warning start time based on true elapsed gameplay
         lr.warningStartMs = lrElapsedMs;
-
+        
         // Clear all bullets cleanly before the event
         bulletsRef.current = [];
-
+        
         addShake(25, 3000);
         playBossWarningSound();
       } else if (lr.warning && lrElapsedMs >= lr.warningStartMs + 3000) {
@@ -1999,10 +1999,10 @@ export default function Game({
           if (lrElapsedMs >= lr.nextWaveAtMs) {
             // Include diagonal types (0 to 5 for 6 variations)
             const type = Math.floor(rngRef.current() * 6);
-
+            
             // Rapid charge configs for 4 clustered lasers
             const baseConfig = { chargeTime: 0.6, activeTime: 0.25, thick: 45, elapsed: 0, spawnedAtMs: lrElapsedMs };
-
+            
             if (type === 0) {
               // 4 Horizontal
               lr.lasers.push({ x: w / 2, y: h * 0.2, isHoriz: true, isDiag: false, ...baseConfig });
@@ -2104,45 +2104,45 @@ export default function Game({
       // ========== GODDESS BOSS TIMELINE (THE ASCENDED BLADE) ==========
       if (god.triggered && !god.defeated) {
         const gTime = elapsedMs - god.startedAtMs;
-
+        
         // Phase A: Calm Void (0 to 5000ms)
         if (god.calmPhase && gTime > 5000) {
-          god.calmPhase = false;
-          god.swordFalling = true;
-          god.swordStartMs = elapsedMs;
-          god.swordY = -300;
-          addShake(30, 1000); // Massive shake when it lands
-          playBossWarningSound(); // Reuse deep bass sound
+           god.calmPhase = false;
+           god.swordFalling = true;
+           god.swordStartMs = elapsedMs;
+           god.swordY = -300;
+           addShake(30, 1000); // Massive shake when it lands
+           playBossWarningSound(); // Reuse deep bass sound
         }
-
+        
         // Phase B: Sword Drop (5000ms to 7000ms)
         if (god.swordFalling) {
-          const sTime = elapsedMs - god.swordStartMs;
-          god.swordY = Math.min(h / 2 + 50, -300 + (sTime / 500) * (h / 2 + 350));
-          if (sTime > 2000) {
-            god.swordFalling = false;
-            god.introActive = true;
-            god.introStartMs = elapsedMs;
-            god.dialogue = "You silenced the false light. Now face its consequence.";
-          }
+           const sTime = elapsedMs - god.swordStartMs;
+           god.swordY = Math.min(h / 2 + 50, -300 + (sTime / 500) * (h / 2 + 350));
+           if (sTime > 2000) {
+              god.swordFalling = false;
+              god.introActive = true;
+              god.introStartMs = elapsedMs;
+              god.dialogue = "You silenced the false light. Now face its consequence.";
+           }
         }
-
+        
         // Phase C: Goddess Descent (7000ms to 14000ms)
         if (god.introActive) {
-          const incTime = elapsedMs - god.introStartMs;
-          god.dialogueTimeMs = incTime;
-          if (incTime > 7000) {
-            god.introActive = false;
-            god.active = true;
+           const incTime = elapsedMs - god.introStartMs;
+           god.dialogueTimeMs = incTime;
+           if (incTime > 7000) {
+              god.introActive = false;
+              god.active = true;
+              
+              // Custom start music cleanly here exactly once
+              startGoddessMusic();
 
-            // Custom start music cleanly here exactly once
-            startGoddessMusic();
-
-            god.nextAttackAtMs = elapsedMs + 1000;
-            god.hp = 300; // Tripled HP
-            god.x = w / 2;
-            god.y = h / 2 - 120; // Float slightly above center initially
-          }
+              god.nextAttackAtMs = elapsedMs + 1000;
+              god.hp = 300; // Tripled HP
+              god.x = w / 2;
+              god.y = h / 2 - 120; // Float slightly above center initially
+           }
         }
 
         // Emit ranked wait cleanly exactly once when boss dies / phase passes
@@ -2155,162 +2155,162 @@ export default function Game({
         if (god.active && !god.defeated) {
           // Boss Stagger logic
           const isStaggered = elapsedMs < god.staggeredUntilMs;
-
+          
           if (!isStaggered) {
-            // 1) Movement towards player
-            const dx = p.x - god.x;
-            const dy = p.y - god.y;
-            const dist = Math.hypot(dx, dy) || 1;
+             // 1) Movement towards player
+             const dx = p.x - god.x;
+             const dy = p.y - god.y;
+             const dist = Math.hypot(dx, dy) || 1;
+             
+             // Base elegant floating movement
+             const floatSpeed = 80; 
+             god.x += (dx / dist) * floatSpeed * dt;
+             god.y += (dy / dist) * floatSpeed * dt;
 
-            // Base elegant floating movement
-            const floatSpeed = 80;
-            god.x += (dx / dist) * floatSpeed * dt;
-            god.y += (dy / dist) * floatSpeed * dt;
+             // 2) Attack Logic
+             if (elapsedMs >= god.nextAttackAtMs && !god.attackState) {
+                // Pick next attack
+                const choice = Math.random();
+                if (choice < 0.25) god.attackType = "NORMAL";
+                else if (choice < 0.50) god.attackType = "HEAVY";
+                else if (choice < 0.70) god.attackType = "POWER";
+                else if (choice < 0.85) god.attackType = "ULTIMATE";
+                else god.attackType = "SHOCK_SHIELD";
 
-            // 2) Attack Logic
-            if (elapsedMs >= god.nextAttackAtMs && !god.attackState) {
-              // Pick next attack
-              const choice = Math.random();
-              if (choice < 0.25) god.attackType = "NORMAL";
-              else if (choice < 0.50) god.attackType = "HEAVY";
-              else if (choice < 0.70) god.attackType = "POWER";
-              else if (choice < 0.85) god.attackType = "ULTIMATE";
-              else god.attackType = "SHOCK_SHIELD";
-
-              god.attackState = "WINDUP";
-              god.nextAttackAtMs = elapsedMs + 400; // Faster Windup duration
-
-              // Attack specific initializations
-              god.telegraphs = [];
-              if (god.attackType === "NORMAL") {
-                addShake(3, 300); // Small telegraph shake
-                const ang = Math.atan2(p.y - god.y, p.x - god.x);
-                god.telegraphs.push({ x: god.x, y: god.y, angle: ang, length: 400, width: 40, isHeavy: false });
-              } else if (god.attackType === "HEAVY") {
-                addShake(8, 600);
-                playLaserChargeSound();
-                god.telegraphs.push({ x: p.x, y: p.y, angle: 0, length: 600, width: 120, isHeavy: true });
-              } else if (god.attackType === "POWER") {
-                playLaserChargeSound();
-                const ang = Math.atan2(p.y - god.y, p.x - god.x);
-                for (let i = 0; i < 4; i++) {
-                  god.telegraphs.push({ x: god.x, y: god.y, angle: ang + (Math.PI / 2) * i, length: 1200, width: 80, isHeavy: true });
+                god.attackState = "WINDUP";
+                god.nextAttackAtMs = elapsedMs + 400; // Faster Windup duration
+                
+                // Attack specific initializations
+                god.telegraphs = [];
+                if (god.attackType === "NORMAL") {
+                   addShake(3, 300); // Small telegraph shake
+                   const ang = Math.atan2(p.y - god.y, p.x - god.x);
+                   god.telegraphs.push({ x: god.x, y: god.y, angle: ang, length: 400, width: 40, isHeavy: false });
+                } else if (god.attackType === "HEAVY") {
+                   addShake(8, 600);
+                   playLaserChargeSound();
+                   god.telegraphs.push({ x: p.x, y: p.y, angle: 0, length: 600, width: 120, isHeavy: true });
+                } else if (god.attackType === "POWER") {
+                   playLaserChargeSound();
+                   const ang = Math.atan2(p.y - god.y, p.x - god.x);
+                   for(let i=0; i<4; i++) {
+                      god.telegraphs.push({ x: god.x, y: god.y, angle: ang + (Math.PI/2)*i, length: 1200, width: 80, isHeavy: true });
+                   }
+                } else if (god.attackType === "ULTIMATE") {
+                   playBossWarningSound();
+                   addShake(15, 800);
+                   god.nextAttackAtMs = elapsedMs + 800; // Faster Longer ultimate windup
+                   for(let i=0; i<8; i++) {
+                      god.telegraphs.push({ x: w/2, y: h/2, angle: (Math.PI/4)*i + Math.PI/8, length: 1500, width: 60, isHeavy: true });
+                   }
+                } else if (god.attackType === "SHOCK_SHIELD") {
+                   playLaserChargeSound();
+                   addShake(10, 600);
+                   god.nextAttackAtMs = elapsedMs + 600; // Shield charge up
+                   god.telegraphs.push({ isShield: true, x: god.x, y: god.y, radius: 400 });
                 }
-              } else if (god.attackType === "ULTIMATE") {
-                playBossWarningSound();
-                addShake(15, 800);
-                god.nextAttackAtMs = elapsedMs + 800; // Faster Longer ultimate windup
-                for (let i = 0; i < 8; i++) {
-                  god.telegraphs.push({ x: w / 2, y: h / 2, angle: (Math.PI / 4) * i + Math.PI / 8, length: 1500, width: 60, isHeavy: true });
+             } else if (elapsedMs >= god.nextAttackAtMs && god.attackState === "WINDUP") {
+                // Execute Attack
+                god.attackState = "ACTIVE";
+                
+                if (god.attackType === "NORMAL") {
+                   // Fast dash line slice
+                   playLaserFireSound();
+                   const tel = god.telegraphs[0];
+                   god.slashEffects.push({ ...tel, lifeMs: 300, maxLifeMs: 300, spawnedAtMs: elapsedMs });
+                   god.nextAttackAtMs = elapsedMs + 300; // Faster Short recovery
+                   // Lunge boss forward along cached angle
+                   god.x += Math.cos(tel.angle) * 300;
+                   god.y += Math.sin(tel.angle) * 300;
+                   
+                } else if (god.attackType === "HEAVY") {
+                   // Giant sweeping dive
+                   playLaserFireSound();
+                   addShake(10, 300);
+                   const tel = god.telegraphs[0];
+                   god.slashEffects.push({ ...tel, lifeMs: 600, maxLifeMs: 600, spawnedAtMs: elapsedMs });
+                   god.nextAttackAtMs = elapsedMs + 600; // Faster Heavy recovery
+                   
+                } else if (god.attackType === "POWER") {
+                   // Arena blood cross waves starting from boss
+                   playLaserFireSound();
+                   addShake(15, 400);
+                   for(const tel of god.telegraphs) {
+                      god.slashEffects.push({ ...tel, lifeMs: 800, maxLifeMs: 800, spawnedAtMs: elapsedMs });
+                   }
+                   god.nextAttackAtMs = elapsedMs + 800; // Faster recovery
+                   
+                } else if (god.attackType === "ULTIMATE") {
+                   // Absolute Storm: 8 surrounding blood slashes crashing inward towards Center
+                   playLaserFireSound();
+                   addShake(25, 800);
+                   for(const tel of god.telegraphs) {
+                      god.slashEffects.push({ ...tel, lifeMs: 1200, maxLifeMs: 1200, spawnedAtMs: elapsedMs });
+                   }
+                   god.nextAttackAtMs = elapsedMs + 1200; // Faster Ultimate recovery
+                } else if (god.attackType === "SHOCK_SHIELD") {
+                   // Propel the shield outward across the arena
+                   playLaserFireSound();
+                   addShake(30, 800);
+                   // Create an expanding ring attack
+                   god.slashEffects.push({ isShieldRun: true, x: god.x, y: god.y, maxRadius: 1500, lifeMs: 1000, maxLifeMs: 1000, spawnedAtMs: elapsedMs });
+                   god.nextAttackAtMs = elapsedMs + 1500; // Long recovery
+                   // The shield exertion causes her to slow down her combat pace briefly
+                   god.shieldSlowUntilMs = elapsedMs + 6000;
                 }
-              } else if (god.attackType === "SHOCK_SHIELD") {
-                playLaserChargeSound();
-                addShake(10, 600);
-                god.nextAttackAtMs = elapsedMs + 600; // Shield charge up
-                god.telegraphs.push({ isShield: true, x: god.x, y: god.y, radius: 400 });
-              }
-            } else if (elapsedMs >= god.nextAttackAtMs && god.attackState === "WINDUP") {
-              // Execute Attack
-              god.attackState = "ACTIVE";
-
-              if (god.attackType === "NORMAL") {
-                // Fast dash line slice
-                playLaserFireSound();
-                const tel = god.telegraphs[0];
-                god.slashEffects.push({ ...tel, lifeMs: 300, maxLifeMs: 300, spawnedAtMs: elapsedMs });
-                god.nextAttackAtMs = elapsedMs + 300; // Faster Short recovery
-                // Lunge boss forward along cached angle
-                god.x += Math.cos(tel.angle) * 300;
-                god.y += Math.sin(tel.angle) * 300;
-
-              } else if (god.attackType === "HEAVY") {
-                // Giant sweeping dive
-                playLaserFireSound();
-                addShake(10, 300);
-                const tel = god.telegraphs[0];
-                god.slashEffects.push({ ...tel, lifeMs: 600, maxLifeMs: 600, spawnedAtMs: elapsedMs });
-                god.nextAttackAtMs = elapsedMs + 600; // Faster Heavy recovery
-
-              } else if (god.attackType === "POWER") {
-                // Arena blood cross waves starting from boss
-                playLaserFireSound();
-                addShake(15, 400);
-                for (const tel of god.telegraphs) {
-                  god.slashEffects.push({ ...tel, lifeMs: 800, maxLifeMs: 800, spawnedAtMs: elapsedMs });
-                }
-                god.nextAttackAtMs = elapsedMs + 800; // Faster recovery
-
-              } else if (god.attackType === "ULTIMATE") {
-                // Absolute Storm: 8 surrounding blood slashes crashing inward towards Center
-                playLaserFireSound();
-                addShake(25, 800);
-                for (const tel of god.telegraphs) {
-                  god.slashEffects.push({ ...tel, lifeMs: 1200, maxLifeMs: 1200, spawnedAtMs: elapsedMs });
-                }
-                god.nextAttackAtMs = elapsedMs + 1200; // Faster Ultimate recovery
-              } else if (god.attackType === "SHOCK_SHIELD") {
-                // Propel the shield outward across the arena
-                playLaserFireSound();
-                addShake(30, 800);
-                // Create an expanding ring attack
-                god.slashEffects.push({ isShieldRun: true, x: god.x, y: god.y, maxRadius: 1500, lifeMs: 1000, maxLifeMs: 1000, spawnedAtMs: elapsedMs });
-                god.nextAttackAtMs = elapsedMs + 1500; // Long recovery
-                // The shield exertion causes her to slow down her combat pace briefly
-                god.shieldSlowUntilMs = elapsedMs + 6000;
-              }
-              god.telegraphs = []; // Clear visual locks
-            } else if (elapsedMs >= god.nextAttackAtMs && god.attackState === "ACTIVE") {
-              // Cleanup and reset for next attack
-              god.attackState = null;
-              const baseIdle = 600 + rngRef.current() * 600;
-              // If she recently threw her shield, heavily decelerate her next attacks
-              const penalty = (elapsedMs < god.shieldSlowUntilMs) ? 2000 : 0;
-              god.nextAttackAtMs = elapsedMs + baseIdle + penalty;
-            }
+                god.telegraphs = []; // Clear visual locks
+             } else if (elapsedMs >= god.nextAttackAtMs && god.attackState === "ACTIVE") {
+                // Cleanup and reset for next attack
+                god.attackState = null;
+                const baseIdle = 600 + rngRef.current() * 600;
+                // If she recently threw her shield, heavily decelerate her next attacks
+                const penalty = (elapsedMs < god.shieldSlowUntilMs) ? 2000 : 0;
+                god.nextAttackAtMs = elapsedMs + baseIdle + penalty;
+             }
           }
 
           // Orb Logic (Spawn + Collect)
           if (!god.collectibleOrb && god.orbCharge < god.orbChargeMax) {
-            if (!god.orbSpawnTime) god.orbSpawnTime = elapsedMs + 2000;
-            if (elapsedMs > god.orbSpawnTime) {
-              god.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 12 };
-              god.orbSpawnTime = null;
-            }
+             if (!god.orbSpawnTime) god.orbSpawnTime = elapsedMs + 2000;
+             if (elapsedMs > god.orbSpawnTime) {
+                god.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 12 };
+                god.orbSpawnTime = null;
+             }
           }
 
           if (god.collectibleOrb) {
-            const orbDiff = Math.hypot(p.x - god.collectibleOrb.x, p.y - god.collectibleOrb.y);
-            if (orbDiff < p.r + god.collectibleOrb.r) {
-              god.orbCharge++;
-              playHealSound(20); // Reuse sound
-              god.collectibleOrb = null;
-
-              if (god.orbCharge >= god.orbChargeMax) {
-                god.shockwaveReady = true;
-                healTextRef.current = { text: "SHOCKWAVE READY (R)", until: nowMs + 2000 };
-              }
-            }
+             const orbDiff = Math.hypot(p.x - god.collectibleOrb.x, p.y - god.collectibleOrb.y);
+             if (orbDiff < p.r + god.collectibleOrb.r) {
+                god.orbCharge++;
+                playHealSound(20); // Reuse sound
+                god.collectibleOrb = null;
+                
+                if (god.orbCharge >= god.orbChargeMax) {
+                   god.shockwaveReady = true;
+                   healTextRef.current = { text: "SHOCKWAVE READY (R)", until: nowMs + 2000 };
+                }
+             }
           }
 
           // Trigger Shockwave (Key 'R')
           if (keysRef.current.has("r") && god.shockwaveReady) {
-            god.shockwaveReady = false;
-            god.orbCharge = 0;
-
-            // Execute Stagger
-            playLaserFireSound();
-            addShake(20, 1000);
-            god.staggeredUntilMs = elapsedMs + 4000; // Stagger for 4 seconds
-            god.attackState = null; // Interrupt attacks
-            god.nextAttackAtMs = Math.max(god.nextAttackAtMs, god.staggeredUntilMs + 1000); // Give buffer after waking up
-            healTextRef.current = { text: "STAGGERED!", until: nowMs + 2000 };
+             god.shockwaveReady = false;
+             god.orbCharge = 0;
+             
+             // Execute Stagger
+             playLaserFireSound();
+             addShake(20, 1000);
+             god.staggeredUntilMs = elapsedMs + 4000; // Stagger for 4 seconds
+             god.attackState = null; // Interrupt attacks
+             god.nextAttackAtMs = Math.max(god.nextAttackAtMs, god.staggeredUntilMs + 1000); // Give buffer after waking up
+             healTextRef.current = { text: "STAGGERED!", until: nowMs + 2000 };
           }
-
+          
           // Cleanup expired slash effects
           for (let i = god.slashEffects.length - 1; i >= 0; i--) {
-            const sl = god.slashEffects[i];
-            sl.lifeMs -= dt * 1000;
-            if (sl.lifeMs <= 0) god.slashEffects.splice(i, 1);
+             const sl = god.slashEffects[i];
+             sl.lifeMs -= dt * 1000;
+             if (sl.lifeMs <= 0) god.slashEffects.splice(i, 1);
           }
         }
       }
@@ -2497,82 +2497,82 @@ export default function Game({
       // Goddess Boss Collisions (Ascended Blade)
       const god = goddessBossRef.current;
       if (god.active && !god.defeated) {
-        const isStaggered = elapsedMs < god.staggeredUntilMs;
+         const isStaggered = elapsedMs < god.staggeredUntilMs;
+         
+         // Touch damage handling
+         const dist = Math.hypot(god.x - p.x, god.y - p.y);
+         if (dist < p.r + 30) {
+            if (isStaggered && elapsedMs > god.bodyTouchCdUntilMs) {
+               // Deal damage to her instead of player getting hurt
+               god.hp = Math.max(0, god.hp - 15);
+               god.bodyTouchCdUntilMs = elapsedMs + 400; // Invincibility frames for boss
+               playHitSound();
+               addShake(15, 200);
+               if (god.hp <= 0) {
+                  god.active = false;
+                  god.defeated = true;
+                  god.bossDeathAnimUntil = elapsedMs + 1500;
+                  
+                  // Stop music cleanly
+                  stopGoddessMusic();
 
-        // Touch damage handling
-        const dist = Math.hypot(god.x - p.x, god.y - p.y);
-        if (dist < p.r + 30) {
-          if (isStaggered && elapsedMs > god.bodyTouchCdUntilMs) {
-            // Deal damage to her instead of player getting hurt
-            god.hp = Math.max(0, god.hp - 15);
-            god.bodyTouchCdUntilMs = elapsedMs + 400; // Invincibility frames for boss
-            playHitSound();
-            addShake(15, 200);
-            if (god.hp <= 0) {
-              god.active = false;
-              god.defeated = true;
-              god.bossDeathAnimUntil = elapsedMs + 1500;
-
-              // Stop music cleanly
-              stopGoddessMusic();
-
-              // Reward Max HP +50 strictly to local player performing the kill
-              maxHpRef.current += 50;
-              setHp(maxHpRef.current);
-              healTextRef.current = { text: "MAX HP +50!", until: nowMs + 3000 };
-              addShake(30, 2000);
-
-              // In Ranked mode, this will securely trigger `goddess:finished` because of lines above
-              // We also clean up visual effects
-              god.slashEffects = [];
-              god.bloodStreams = [];
-              spawnRef.current.nextSpawnAtMs = elapsedMs + 2000; // Resume normal bullets safely
-              god.bossPauseTotal = (elapsedMs - god.bossPauseStart);
+                  // Reward Max HP +50 strictly to local player performing the kill
+                  maxHpRef.current += 50;
+                  setHp(maxHpRef.current);
+                  healTextRef.current = { text: "MAX HP +50!", until: nowMs + 3000 };
+                  addShake(30, 2000);
+                  
+                  // In Ranked mode, this will securely trigger `goddess:finished` because of lines above
+                  // We also clean up visual effects
+                  god.slashEffects = [];
+                  god.bloodStreams = [];
+                  spawnRef.current.nextSpawnAtMs = elapsedMs + 2000; // Resume normal bullets safely
+                  god.bossPauseTotal = (elapsedMs - god.bossPauseStart);
+               }
+            } else if (!isStaggered && !tookHit && elapsedMs > god.bossTouchDamageCdUntilMs) {
+               // She hurts you
+               tookHit = true; applyDamage(25, null);
+               god.bossTouchDamageCdUntilMs = elapsedMs + 500; // Prevents insta-death melting
             }
-          } else if (!isStaggered && !tookHit && elapsedMs > god.bossTouchDamageCdUntilMs) {
-            // She hurts you
-            tookHit = true; applyDamage(25, null);
-            god.bossTouchDamageCdUntilMs = elapsedMs + 500; // Prevents insta-death melting
-          }
-        }
-
-        // Slash Effect Damage Player Hitbox
-        if (!tookHit && elapsedMs > god.bossTouchDamageCdUntilMs) {
-          for (const sl of god.slashEffects) {
-            // Check for expanding shield collision
-            if (sl.isShieldRun) {
-              const currentRadius = sl.maxRadius * (1.0 - (sl.lifeMs / sl.maxLifeMs));
-              const distToCenter = Math.hypot(p.x - sl.x, p.y - sl.y);
-              const shieldThickness = 40 * (sl.lifeMs / sl.maxLifeMs); // Matches visual thickness
-              if (distToCenter > currentRadius - shieldThickness / 2 - p.r && distToCenter < currentRadius + shieldThickness / 2 + p.r) {
-                tookHit = true;
-                applyDamage(30, null); // High damage for shield
-                god.bossTouchDamageCdUntilMs = elapsedMs + 500;
-                break;
-              }
-            } else {
-              // Using distance to line segment approximation
-              // Transform p to slash local space
-              const px = p.x - sl.x;
-              const py = p.y - sl.y;
-              const cost = Math.cos(-sl.angle);
-              const sint = Math.sin(-sl.angle);
-              const nx = px * cost - py * sint;
-              const ny = px * sint + py * cost;
-
-              // Active timeframe (only hurt when slash is bright, not fading out heavily)
-              const activeRatio = sl.lifeMs / sl.maxLifeMs;
-              if (activeRatio > 0.4) {
-                if (nx > -sl.length / 2 && nx < sl.length / 2 && Math.abs(ny) < sl.width / 2 + p.r) {
-                  tookHit = true;
-                  applyDamage(sl.isHeavy ? 35 : 20, null);
-                  god.bossTouchDamageCdUntilMs = elapsedMs + 500;
-                  break;
+         }
+         
+         // Slash Effect Damage Player Hitbox
+         if (!tookHit && elapsedMs > god.bossTouchDamageCdUntilMs) {
+            for (const sl of god.slashEffects) {
+                // Check for expanding shield collision
+                if (sl.isShieldRun) {
+                   const currentRadius = sl.maxRadius * (1.0 - (sl.lifeMs / sl.maxLifeMs));
+                   const distToCenter = Math.hypot(p.x - sl.x, p.y - sl.y);
+                   const shieldThickness = 40 * (sl.lifeMs / sl.maxLifeMs); // Matches visual thickness
+                   if (distToCenter > currentRadius - shieldThickness / 2 - p.r && distToCenter < currentRadius + shieldThickness / 2 + p.r) {
+                      tookHit = true;
+                      applyDamage(30, null); // High damage for shield
+                      god.bossTouchDamageCdUntilMs = elapsedMs + 500;
+                      break;
+                   }
+                } else {
+                   // Using distance to line segment approximation
+                   // Transform p to slash local space
+                   const px = p.x - sl.x;
+                   const py = p.y - sl.y;
+                   const cost = Math.cos(-sl.angle);
+                   const sint = Math.sin(-sl.angle);
+                   const nx = px * cost - py * sint;
+                   const ny = px * sint + py * cost;
+                   
+                   // Active timeframe (only hurt when slash is bright, not fading out heavily)
+                   const activeRatio = sl.lifeMs / sl.maxLifeMs;
+                   if (activeRatio > 0.4) {
+                      if (nx > -sl.length/2 && nx < sl.length/2 && Math.abs(ny) < sl.width/2 + p.r) {
+                         tookHit = true; 
+                         applyDamage(sl.isHeavy ? 35 : 20, null);
+                         god.bossTouchDamageCdUntilMs = elapsedMs + 500;
+                         break;
+                      }
+                   }
                 }
-              }
             }
-          }
-        }
+         }
       }
 
       if (!tookHit && rad.active && !rad.defeated) {
@@ -2616,7 +2616,7 @@ export default function Game({
         for (const L of lr.lasers) {
           if (L.elapsed > L.chargeTime) {
             let hit = false;
-
+            
             if (L.isDiag) {
               // Math for checking diagonal laser collision
               const dx = p.x - L.cx;
@@ -2897,7 +2897,7 @@ export default function Game({
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText("WARNING", w / 2, h / 2 - 40);
-
+        
         ctx.fillStyle = "#FF3366";
         ctx.font = "900 48px monospace";
         ctx.fillText("LASER ROUND", w / 2, h / 2 + 30);
@@ -2916,10 +2916,10 @@ export default function Game({
         if (L.elapsed < L.chargeTime) {
           ctx.fillStyle = "rgba(255, 50, 100, 0.25)";
           if (L.isDiag) {
-            ctx.save();
-            ctx.translate(L.cx, L.cy);
+            ctx.save(); 
+            ctx.translate(L.cx, L.cy); 
             ctx.rotate(L.angle);
-            ctx.fillRect(-L.length / 2, -2, L.length, 4);
+            ctx.fillRect(-L.length/2, -2, L.length, 4);
             ctx.restore();
           } else if (L.isHoriz) {
             ctx.fillRect(0, L.y - 2, w, 4);
@@ -2933,12 +2933,12 @@ export default function Game({
           ctx.shadowColor = "#FF3366";
           ctx.shadowBlur = 20;
           const th = L.thick * (1 - activeRatio * 0.1);
-
+          
           if (L.isDiag) {
-            ctx.save();
-            ctx.translate(L.cx, L.cy);
+            ctx.save(); 
+            ctx.translate(L.cx, L.cy); 
             ctx.rotate(L.angle);
-            ctx.fillRect(-L.length / 2, -th / 2, L.length, th);
+            ctx.fillRect(-L.length/2, -th / 2, L.length, th);
             ctx.restore();
           } else if (L.isHoriz) {
             ctx.fillRect(0, L.y - th / 2, w, th);
@@ -3139,465 +3139,465 @@ export default function Game({
     // ========== GODDESS BOSS VISUALS (THE ASCENDED BLADE) ==========
     const god = goddessBossRef.current;
     if (god.triggered && !god.defeated) {
-      // 1. Blood Rivers Background
-      ctx.save();
-      ctx.globalAlpha = 0.15 + 0.05 * Math.sin(now / 500);
-      ctx.fillStyle = "#aa0000";
-      // Draw some sine wave streams across the floor
-      for (let i = 0; i < 5; i++) {
-        ctx.beginPath();
-        ctx.moveTo(0, h * 0.2 * i + 100);
-        for (let x = 0; x < w; x += 50) {
-          ctx.lineTo(x, h * 0.2 * i + 100 + Math.sin(x / 100 + now / 800 + i) * 60);
-        }
-        ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.fill();
-      }
-      ctx.restore();
-
-      // 2. Falling/Static Sword & Calm Void overlay
-      if (god.calmPhase) {
-        // Intense dark dramatic vignette
-        const ratio = Math.min(1, (elapsedMs - god.calmStartMs) / 5000); // 5 sec windup
-        const grad = ctx.createRadialGradient(w / 2, h / 2, 100, w / 2, h / 2, h);
-        grad.addColorStop(0, `rgba(0,0,0,${0.3 * ratio})`);
-        grad.addColorStop(1, `rgba(15,0,5,${0.95 * ratio})`);
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, h);
-
-        ctx.fillStyle = `rgba(255,50,50, ${Math.sin(now / 150) * 0.1 * ratio})`;
-        ctx.font = "italic 20px monospace";
-        ctx.textAlign = "center";
-        ctx.fillText("An ancient presence awakens...", w / 2, h / 2 - 100);
-      }
-
-      if (god.swordFalling || god.introActive || god.active) {
-        ctx.save();
-        // If active, sword is in her hand (part of her model). If intro or falling, it's center stage.
-        if (!god.active) {
-          ctx.translate(w / 2, god.swordY);
-          // Sword Glow
-          ctx.shadowColor = "white";
-          ctx.shadowBlur = 30 + Math.sin(now / 100) * 10;
-          ctx.fillStyle = "white";
-          // Blade
+       // 1. Blood Rivers Background
+       ctx.save();
+       ctx.globalAlpha = 0.15 + 0.05 * Math.sin(now / 500);
+       ctx.fillStyle = "#aa0000";
+       // Draw some sine wave streams across the floor
+       for (let i = 0; i < 5; i++) {
           ctx.beginPath();
-          ctx.moveTo(0, 150);
-          ctx.lineTo(15, 0);
-          ctx.lineTo(0, -250);
-          ctx.lineTo(-15, 0);
-          ctx.fill();
-          // Crossguard
-          ctx.fillStyle = "#FF3366";
-          ctx.shadowColor = "#FF3366";
-          ctx.fillRect(-60, 0, 120, 15);
-          // Pommel
-          ctx.beginPath(); ctx.arc(0, 170, 15, 0, Math.PI * 2); ctx.fill();
-          ctx.shadowBlur = 0;
-
-          // Impact Crater if landed
-          if (god.introActive) {
-            ctx.strokeStyle = "#FF3366";
-            ctx.lineWidth = 3;
-            ctx.beginPath(); ctx.ellipse(0, 160, 120, 40, 0, 0, Math.PI * 2); ctx.stroke();
-            ctx.beginPath(); ctx.ellipse(0, 160, 80, 20, 0, 0, Math.PI * 2); ctx.stroke();
+          ctx.moveTo(0, h * 0.2 * i + 100);
+          for (let x = 0; x < w; x += 50) {
+             ctx.lineTo(x, h * 0.2 * i + 100 + Math.sin(x / 100 + now / 800 + i) * 60);
           }
-        }
-        ctx.restore();
-      }
+          ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.fill();
+       }
+       ctx.restore();
 
-      // 3. Goddess Character Model (Highly Detailed Humanoid/Valkyrie)
-      if (god.introActive || god.active) {
-        ctx.save();
-        const gx = god.introActive ? w / 2 : god.x;
-        // Float her down during intro
-        let gy = god.introActive ? -100 + Math.min(1, god.dialogueTimeMs / 2000) * (h / 2 - 20) : god.y;
-        ctx.translate(gx, gy);
-
-        const isStaggered = god.active && elapsedMs < god.staggeredUntilMs;
-        if (isStaggered) {
-          ctx.translate(Math.sin(now / 30) * 10, Math.cos(now / 30) * 10); // Shake wildly
-        }
-
-        const breath = isStaggered ? 0 : Math.sin(now / 300);
-        const wingFlap = isStaggered ? Math.PI / 6 * Math.sin(now / 50) : Math.sin(now / 200) * 0.2;
-
-        ctx.shadowColor = isStaggered ? "transparent" : "rgba(255, 255, 255, 0.8)";
-        ctx.shadowBlur = isStaggered ? 0 : 25;
-
-        // === INNER AURA ===
-        ctx.beginPath();
-        ctx.arc(0, -40, isStaggered ? 40 : 60 + Math.sin(now / 150) * 10, 0, Math.PI * 2);
-        ctx.fillStyle = isStaggered ? "rgba(255, 0, 0, 0.1)" : "rgba(255, 50, 100, 0.15)";
-        ctx.fill();
-
-        // === WINGS ===
-        const drawWing = (isLeft) => {
-          ctx.save();
-          ctx.scale(isLeft ? -1 : 1, 1);
-          ctx.rotate(wingFlap + 0.1);
-          ctx.fillStyle = isStaggered ? "rgba(80, 80, 80, 0.8)" : "rgba(240, 245, 255, 0.9)";
-          ctx.strokeStyle = isStaggered ? "#333" : "white";
-          ctx.lineWidth = 1;
-
-          // Base arc of the wing
-          ctx.beginPath();
-          ctx.moveTo(0, -60);
-          ctx.quadraticCurveTo(150, -180, 300, -80);
-          ctx.quadraticCurveTo(200, 50, 0, -20);
-          ctx.fill();
-
-          // Glowing Edge Trails (Ascended Form)
-          if (!isStaggered) {
-            ctx.strokeStyle = "rgba(255, 50, 100, 0.6)";
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(0, -60);
-            ctx.quadraticCurveTo(150, -180, 300, -80);
-            ctx.stroke();
-          }
-
-          // Articulated Feathers
-          ctx.fillStyle = isStaggered ? "rgba(50, 50, 50, 0.8)" : "rgba(255, 255, 255, 0.95)";
-          for (let i = 0; i < 8; i++) {
-            ctx.save();
-            ctx.translate(20 + i * 30, -50 + i * 10);
-            ctx.rotate(0.2 + i * 0.1 + Math.sin(now / 200 + i) * 0.1);
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.quadraticCurveTo(20, 60, 5, 120);
-            ctx.quadraticCurveTo(-15, 60, 0, 0);
-            ctx.fill(); ctx.stroke();
-            ctx.restore();
-          }
-          ctx.restore();
-        };
-        drawWing(true);
-        drawWing(false);
-
-        // === FLOWING HAIR ===
-        // Inner Dark/Red Hair Layer
-        ctx.fillStyle = isStaggered ? "#330000" : "#FF3366";
-        ctx.beginPath();
-        ctx.moveTo(0, -90);
-        ctx.quadraticCurveTo(-70, -70 + breath * 5, -60 + Math.sin(now / 150) * 20, 10 + Math.cos(now / 150) * 15);
-        ctx.quadraticCurveTo(-30, -10, 0, -60);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(0, -90);
-        ctx.quadraticCurveTo(70, -70 + breath * 5, 60 + Math.cos(now / 150) * 20, 10 + Math.sin(now / 150) * 15);
-        ctx.quadraticCurveTo(30, -10, 0, -60);
-        ctx.fill();
-
-        // Outer White Hair Layer
-        ctx.fillStyle = "white";
-        ctx.beginPath();
-        ctx.moveTo(0, -90);
-        ctx.quadraticCurveTo(-60, -80 + breath * 5, -50 + Math.sin(now / 150) * 15, -10 + Math.cos(now / 150) * 10);
-        ctx.quadraticCurveTo(-20, -20, 0, -60);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(0, -90);
-        ctx.quadraticCurveTo(60, -80 + breath * 5, 50 + Math.cos(now / 150) * 15, -10 + Math.sin(now / 150) * 10);
-        ctx.quadraticCurveTo(20, -20, 0, -60);
-        ctx.fill();
-
-        // === FLOWING SKIRT ===
-        ctx.fillStyle = isStaggered ? "rgba(80, 0, 0, 0.9)" : "rgba(180, 20, 50, 0.95)";
-        ctx.beginPath();
-        ctx.moveTo(-25, 10);
-        ctx.quadraticCurveTo(-60, 100, -40 + Math.sin(now / 200) * 20, 160 + Math.cos(now / 300) * 10);
-        ctx.quadraticCurveTo(0, 180 + Math.sin(now / 250) * 15, 40 + Math.cos(now / 200) * 20, 160 + Math.sin(now / 300) * 10);
-        ctx.quadraticCurveTo(60, 100, 25, 10);
-        ctx.fill();
-        // Skirt folds/lines
-        ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(-10, 10); ctx.quadraticCurveTo(-20, 80, -10 + Math.sin(now / 200) * 10, 165); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(10, 10); ctx.quadraticCurveTo(20, 80, 10 + Math.cos(now / 200) * 10, 165); ctx.stroke();
-
-        // === VALKYRIE TORSO (ARMOR) ===
-        ctx.fillStyle = "#1a1a1a";
-        ctx.strokeStyle = isStaggered ? "#AA0000" : "#FF3366";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.moveTo(-15, -70); // Neck L
-        ctx.lineTo(15, -70); // Neck R
-        ctx.lineTo(35, -50 + breath * 2); // Shoulder R
-        ctx.lineTo(25, -20); // Chest plate R
-        ctx.lineTo(25, 10); // Waist R
-        ctx.lineTo(-25, 10); // Waist L
-        ctx.lineTo(-25, -20); // Chest plate L
-        ctx.lineTo(-35, -50 + breath * 2); // Shoulder L
-        ctx.closePath();
-        ctx.fill(); ctx.stroke();
-
-        // Outer Gold Trim Pauldrons
-        ctx.strokeStyle = isStaggered ? "#555" : "gold";
-        ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.moveTo(15, -70); ctx.lineTo(35, -50 + breath * 2); ctx.lineTo(25, -30); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-15, -70); ctx.lineTo(-35, -50 + breath * 2); ctx.lineTo(-25, -30); ctx.stroke();
-
-        // Armor Details & Abdomen Plating
-        ctx.strokeStyle = isStaggered ? "#AA0000" : "#FF3366";
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(0, -70); ctx.lineTo(0, 10); ctx.stroke(); // Center breastplate line
-        ctx.beginPath(); ctx.moveTo(-20, -10); ctx.lineTo(0, -5); ctx.lineTo(20, -10); ctx.stroke(); // Rib plate 1
-        ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(0, 5); ctx.lineTo(15, 0); ctx.stroke(); // Rib plate 2
-
-        // Central Ascendant Gem
-        ctx.fillStyle = isStaggered ? "red" : "#FF3366";
-        ctx.shadowColor = isStaggered ? "transparent" : "#FF3366";
-        ctx.shadowBlur = isStaggered ? 0 : 20 + Math.sin(now / 100) * 10;
-        ctx.beginPath(); ctx.arc(0, -40, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(0, -42, 3, 0, Math.PI * 2); ctx.fill(); // Highlight
-        ctx.shadowBlur = 0;
-
-        // === HEAD & HALO ===
-        ctx.fillStyle = "#111"; // Make helmet base dark
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        // Face profile / Helmet
-        ctx.beginPath();
-        ctx.arc(0, -90, 16, 0, Math.PI * 2);
-        ctx.fill(); ctx.stroke();
-
-        // Glowing Visor / Slit Eye
-        ctx.fillStyle = isStaggered ? "red" : "#FF3366";
-        ctx.shadowColor = isStaggered ? "transparent" : "#FF3366";
-        ctx.shadowBlur = isStaggered ? 0 : 15;
-        ctx.beginPath(); ctx.ellipse(0, -90, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "white";
-        ctx.beginPath(); ctx.ellipse(0, -90, 4, 1, 0, 0, Math.PI * 2); ctx.fill(); // Inner eye core
-        ctx.shadowBlur = 0;
-
-        // Halo
-        ctx.strokeStyle = isStaggered ? "red" : "gold";
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.ellipse(0, -115 + Math.sin(now / 200) * 3, 25, 8, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // === ARMS & SHOCK SHIELD ===
-        if (god.active) {
-          const shieldThrown = (god.attackType === "SHOCK_SHIELD" && god.attackState === "ACTIVE");
-
-          // Draw arms resting backwards 
-          ctx.save();
-          // Right Arm
-          ctx.translate(35, -50 + breath * 2);
-          ctx.rotate(isStaggered ? Math.PI / 2 : Math.PI / 6);
-          ctx.fillStyle = "#111"; ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.roundRect(-8, 0, 16, 40, 8); ctx.fill(); ctx.stroke();
-          ctx.translate(0, 35); ctx.rotate(-0.5);
-          ctx.beginPath(); ctx.roundRect(-6, 0, 12, 35, 6); ctx.fill(); ctx.stroke();
-          ctx.restore();
-
-          // Left Arm
-          ctx.save();
-          ctx.translate(-35, -50 + breath * 2);
-          ctx.rotate(isStaggered ? -Math.PI / 2 : -Math.PI / 6);
-          ctx.fillStyle = "#111"; ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.roundRect(-8, 0, 16, 40, 8); ctx.fill(); ctx.stroke();
-          ctx.translate(0, 35); ctx.rotate(0.5);
-          ctx.beginPath(); ctx.roundRect(-6, 0, 12, 35, 6); ctx.fill(); ctx.stroke();
-          ctx.translate(0, 35);
-          ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
-          ctx.restore();
-
-          // Draw Orbiting Shock Shield OR Warning Charge
-          if (!shieldThrown && !isStaggered) {
-            // If she's charging the shield, condense it
-            const isCharging = (god.attackState === "WINDUP" && god.attackType === "SHOCK_SHIELD");
-            const shieldRadius = isCharging ? (100 - Math.min(60, (now - god.nextAttackAtMs + 600) / 10)) : (90 + Math.sin(now / 150) * 15);
-
-            ctx.save();
-            ctx.scale(1, 0.4); // Tilt ring into 3D perspective
-            ctx.rotate(now / 500); // Spin the ring
-
-            // Outer ring
-            ctx.strokeStyle = `rgba(255, 50, 100, ${isCharging ? 0.9 : 0.6})`;
-            ctx.lineWidth = isCharging ? 12 : 6;
-            ctx.shadowColor = "#FF3366";
-            ctx.shadowBlur = 20;
-            ctx.beginPath();
-            ctx.arc(0, 0, shieldRadius, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Inner electric arcs
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 3;
-            ctx.setLineDash([15, 25]);
-            ctx.beginPath();
-            ctx.arc(0, 0, shieldRadius - 5, -now / 300, Math.PI * 2 - now / 300);
-            ctx.stroke();
-
-            ctx.restore();
-          }
-        }
-
-        ctx.shadowBlur = 0;
-        ctx.restore();
-      }
-
-      // 4. Intro Dialogue Box
-      if (god.introActive && god.dialogueTimeMs > 2000) {
-        let boxAlpha = Math.min(0.8, (god.dialogueTimeMs - 2000) / 500);
-        let textAlpha = 1.0;
-
-        if (god.dialogueTimeMs > 6000) {
-          const fadeOut = 1 - (god.dialogueTimeMs - 6000) / 1000;
-          boxAlpha *= Math.max(0, fadeOut);
-          textAlpha *= Math.max(0, fadeOut);
-        }
-
-        ctx.fillStyle = `rgba(0, 0, 0, ${boxAlpha})`;
-        ctx.fillRect(0, h / 2 + 100, w, 100);
-
-        ctx.strokeStyle = `rgba(255, 255, 255, ${textAlpha})`;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, h / 2 + 100, w, 100);
-
-        ctx.fillStyle = `rgba(255, 255, 255, ${textAlpha})`;
-        ctx.font = "italic bold 28px monospace";
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-
-        // Typewriter effect
-        const charsToShow = Math.floor((god.dialogueTimeMs - 2000) / 40);
-        const visibleText = god.dialogue.substring(0, charsToShow);
-        ctx.fillText(visibleText, w / 2, h / 2 + 150);
-      }
-
-      // 5. Active Combat Effects (Slashes, HUD, Orbs)
-      if (god.active) {
-        // Telegraph Effects during Windup
-        if (god.attackState === "WINDUP" && god.telegraphs) {
-          for (const tel of god.telegraphs) {
-            if (tel.isShield) {
-              // Draw massive circular warning for shock shield
-              ctx.save();
-              const isWarningPulse = Math.floor(now / 50) % 2 === 0;
-              ctx.fillStyle = `rgba(255, 0, 0, ${isWarningPulse ? 0.3 : 0.1})`;
-              ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
-              ctx.lineWidth = 4;
-              ctx.beginPath();
-              ctx.arc(tel.x, tel.y, tel.radius, 0, Math.PI * 2);
-              ctx.fill(); ctx.stroke();
-              ctx.restore();
-            } else {
-              ctx.save();
-              ctx.translate(tel.x, tel.y);
-              ctx.rotate(tel.angle);
-              const isWarningPulse = Math.floor(now / 50) % 2 === 0;
-              ctx.fillStyle = tel.isHeavy ? `rgba(255, 0, 0, ${isWarningPulse ? 0.3 : 0.1})` : `rgba(255, 100, 100, 0.2)`;
-
-              // Diamond shape indicator matches exactly the hitbox
-              ctx.beginPath();
-              ctx.moveTo(-tel.length / 2, 0);
-              ctx.lineTo(0, -(tel.width / 2));
-              ctx.lineTo(tel.length / 2, 0);
-              ctx.lineTo(0, (tel.width / 2));
-              ctx.fill();
-
-              ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
-              ctx.lineWidth = 1;
-              ctx.stroke();
-              ctx.restore();
-            }
-          }
-        }
-        // Slash / Shield Effects
-        for (const sl of god.slashEffects) {
-          const activeRatio = sl.lifeMs / sl.maxLifeMs;
-          const expRatio = 1.0 - activeRatio; // 0.0 to 1.0
-
-          if (sl.isShieldRun) {
-            // Expanding Propelled Shock Shield
-            ctx.save();
-            const currentRadius = sl.maxRadius * expRatio;
-            ctx.strokeStyle = `rgba(255, 50, 100, ${activeRatio})`;
-            ctx.lineWidth = 40 * activeRatio;
-            ctx.shadowColor = "#FF3366";
-            ctx.shadowBlur = 30;
-            ctx.beginPath();
-            ctx.arc(sl.x, sl.y, currentRadius, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Core inner electric string
-            ctx.strokeStyle = `rgba(255, 255, 255, ${activeRatio})`;
-            ctx.lineWidth = 10 * activeRatio;
-            ctx.setLineDash([20, 40]);
-            ctx.stroke();
-
-            ctx.restore();
-          } else {
-            // Standard Diamond Sweep
-            ctx.save();
-            ctx.translate(sl.x, sl.y);
-            ctx.rotate(sl.angle);
-
-            ctx.fillStyle = sl.isHeavy ? `rgba(255, 0, 50, ${activeRatio})` : `rgba(255, 255, 255, ${activeRatio})`;
-            ctx.shadowColor = sl.isHeavy ? "red" : "white";
-            ctx.shadowBlur = 20 * activeRatio;
-
-            // Draw diamond sweep slash
-            ctx.beginPath();
-            ctx.moveTo(-sl.length / 2, 0);
-            ctx.lineTo(0, -(sl.width / 2) * activeRatio);
-            ctx.lineTo(sl.length / 2, 0);
-            ctx.lineTo(0, (sl.width / 2) * activeRatio);
-            ctx.fill();
-            ctx.restore();
-          }
-        }
-
-        // Orb Collectible
-        if (god.collectibleOrb) {
-          const orb = god.collectibleOrb;
-          ctx.shadowColor = "#FF3366"; ctx.shadowBlur = 15;
-          ctx.fillStyle = "white";
-          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r + Math.sin(now / 100) * 3, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = "#FF3366";
-          ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r * 0.5, 0, Math.PI * 2); ctx.fill();
-          ctx.shadowBlur = 0;
-        }
-
-        // Boss HUD
-        ctx.fillStyle = "white";
-        ctx.font = "bold 24px monospace";
-        ctx.textAlign = "center";
-        ctx.shadowColor = "red"; ctx.shadowBlur = 10;
-        ctx.fillText("THE SHOCK EMPRESS", w / 2, 40);
-        ctx.shadowBlur = 0;
-
-        // Boss HP Bar
-        ctx.fillStyle = "rgba(50, 0, 0, 0.5)";
-        ctx.fillRect(w / 2 - 200, 60, 400, 15);
-        ctx.fillStyle = "white";
-        const hpRatio = Math.max(0, god.hp / 300);
-        ctx.fillRect(w / 2 - 200, 60, 400 * hpRatio, 15);
-        ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
-        ctx.strokeRect(w / 2 - 200, 60, 400, 15);
-
-        // Stagger UI
-        const isStaggered = elapsedMs < god.staggeredUntilMs;
-        if (isStaggered) {
-          ctx.fillStyle = "rgba(100, 255, 100, 0.2)";
+       // 2. Falling/Static Sword & Calm Void overlay
+       if (god.calmPhase) {
+          // Intense dark dramatic vignette
+          const ratio = Math.min(1, (elapsedMs - god.calmStartMs) / 5000); // 5 sec windup
+          const grad = ctx.createRadialGradient(w/2, h/2, 100, w/2, h/2, h);
+          grad.addColorStop(0, `rgba(0,0,0,${0.3 * ratio})`);
+          grad.addColorStop(1, `rgba(15,0,5,${0.95 * ratio})`);
+          ctx.fillStyle = grad;
           ctx.fillRect(0, 0, w, h);
-          ctx.fillStyle = "lime";
-          ctx.font = "bold 36px monospace";
-          ctx.fillText("STAGGERED! ATTACK NOW!", w / 2, 120);
-        } else {
-          // Charge Bar UI
-          const chargeText = god.orbCharge >= god.orbChargeMax ? "PRESS R - SHOCKWAVE READY!" : `CHARGE: ${god.orbCharge} / ${god.orbChargeMax}`;
-          ctx.fillStyle = god.orbCharge >= god.orbChargeMax ? "#FF3366" : "rgba(255, 255, 255, 0.8)";
-          ctx.font = god.orbCharge >= god.orbChargeMax ? "bold 24px monospace" : "18px monospace";
-          if (god.orbCharge >= god.orbChargeMax && Math.floor(now / 100) % 2 === 0) {
-            ctx.fillStyle = "white";
-            ctx.shadowColor = "#FF3366"; ctx.shadowBlur = 20;
+          
+          ctx.fillStyle = `rgba(255,50,50, ${Math.sin(now/150) * 0.1 * ratio})`;
+          ctx.font = "italic 20px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("An ancient presence awakens...", w/2, h/2 - 100);
+       }
+
+       if (god.swordFalling || god.introActive || god.active) {
+          ctx.save();
+          // If active, sword is in her hand (part of her model). If intro or falling, it's center stage.
+          if (!god.active) {
+             ctx.translate(w / 2, god.swordY);
+             // Sword Glow
+             ctx.shadowColor = "white";
+             ctx.shadowBlur = 30 + Math.sin(now/100) * 10;
+             ctx.fillStyle = "white";
+             // Blade
+             ctx.beginPath();
+             ctx.moveTo(0, 150);
+             ctx.lineTo(15, 0);
+             ctx.lineTo(0, -250);
+             ctx.lineTo(-15, 0);
+             ctx.fill();
+             // Crossguard
+             ctx.fillStyle = "#FF3366";
+             ctx.shadowColor = "#FF3366";
+             ctx.fillRect(-60, 0, 120, 15);
+             // Pommel
+             ctx.beginPath(); ctx.arc(0, 170, 15, 0, Math.PI * 2); ctx.fill();
+             ctx.shadowBlur = 0;
+             
+             // Impact Crater if landed
+             if (god.introActive) {
+                ctx.strokeStyle = "#FF3366";
+                ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.ellipse(0, 160, 120, 40, 0, 0, Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.ellipse(0, 160, 80, 20, 0, 0, Math.PI*2); ctx.stroke();
+             }
           }
-          ctx.fillText(chargeText, w / 2, h - 40);
+          ctx.restore();
+       }
+
+       // 3. Goddess Character Model (Highly Detailed Humanoid/Valkyrie)
+       if (god.introActive || god.active) {
+          ctx.save();
+          const gx = god.introActive ? w / 2 : god.x;
+          // Float her down during intro
+          let gy = god.introActive ? -100 + Math.min(1, god.dialogueTimeMs / 2000) * (h / 2 - 20) : god.y;
+          ctx.translate(gx, gy);
+          
+          const isStaggered = god.active && elapsedMs < god.staggeredUntilMs;
+          if (isStaggered) {
+             ctx.translate(Math.sin(now/30)*10, Math.cos(now/30)*10); // Shake wildly
+          }
+          
+          const breath = isStaggered ? 0 : Math.sin(now / 300);
+          const wingFlap = isStaggered ? Math.PI/6 * Math.sin(now/50) : Math.sin(now / 200) * 0.2;
+          
+          ctx.shadowColor = isStaggered ? "transparent" : "rgba(255, 255, 255, 0.8)";
+          ctx.shadowBlur = isStaggered ? 0 : 25;
+
+          // === INNER AURA ===
+          ctx.beginPath();
+          ctx.arc(0, -40, isStaggered ? 40 : 60 + Math.sin(now/150)*10, 0, Math.PI*2);
+          ctx.fillStyle = isStaggered ? "rgba(255, 0, 0, 0.1)" : "rgba(255, 50, 100, 0.15)";
+          ctx.fill();
+
+          // === WINGS ===
+          const drawWing = (isLeft) => {
+             ctx.save();
+             ctx.scale(isLeft ? -1 : 1, 1);
+             ctx.rotate(wingFlap + 0.1);
+             ctx.fillStyle = isStaggered ? "rgba(80, 80, 80, 0.8)" : "rgba(240, 245, 255, 0.9)";
+             ctx.strokeStyle = isStaggered ? "#333" : "white";
+             ctx.lineWidth = 1;
+             
+             // Base arc of the wing
+             ctx.beginPath();
+             ctx.moveTo(0, -60);
+             ctx.quadraticCurveTo(150, -180, 300, -80);
+             ctx.quadraticCurveTo(200, 50, 0, -20);
+             ctx.fill();
+             
+             // Glowing Edge Trails (Ascended Form)
+             if (!isStaggered) {
+                ctx.strokeStyle = "rgba(255, 50, 100, 0.6)";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(0, -60);
+                ctx.quadraticCurveTo(150, -180, 300, -80);
+                ctx.stroke();
+             }
+             
+             // Articulated Feathers
+             ctx.fillStyle = isStaggered ? "rgba(50, 50, 50, 0.8)" : "rgba(255, 255, 255, 0.95)";
+             for(let i=0; i<8; i++) {
+                ctx.save();
+                ctx.translate(20 + i*30, -50 + i*10);
+                ctx.rotate(0.2 + i*0.1 + Math.sin(now/200 + i)*0.1);
+                ctx.beginPath();
+                ctx.moveTo(0,0);
+                ctx.quadraticCurveTo(20, 60, 5, 120);
+                ctx.quadraticCurveTo(-15, 60, 0, 0);
+                ctx.fill(); ctx.stroke();
+                ctx.restore();
+             }
+             ctx.restore();
+          };
+          drawWing(true);
+          drawWing(false);
+
+          // === FLOWING HAIR ===
+          // Inner Dark/Red Hair Layer
+          ctx.fillStyle = isStaggered ? "#330000" : "#FF3366";
+          ctx.beginPath();
+          ctx.moveTo(0, -90);
+          ctx.quadraticCurveTo(-70, -70 + breath*5, -60 + Math.sin(now/150)*20, 10 + Math.cos(now/150)*15);
+          ctx.quadraticCurveTo(-30, -10, 0, -60);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(0, -90);
+          ctx.quadraticCurveTo(70, -70 + breath*5, 60 + Math.cos(now/150)*20, 10 + Math.sin(now/150)*15);
+          ctx.quadraticCurveTo(30, -10, 0, -60);
+          ctx.fill();
+
+          // Outer White Hair Layer
+          ctx.fillStyle = "white";
+          ctx.beginPath();
+          ctx.moveTo(0, -90);
+          ctx.quadraticCurveTo(-60, -80 + breath*5, -50 + Math.sin(now/150)*15, -10 + Math.cos(now/150)*10);
+          ctx.quadraticCurveTo(-20, -20, 0, -60);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(0, -90);
+          ctx.quadraticCurveTo(60, -80 + breath*5, 50 + Math.cos(now/150)*15, -10 + Math.sin(now/150)*10);
+          ctx.quadraticCurveTo(20, -20, 0, -60);
+          ctx.fill();
+
+          // === FLOWING SKIRT ===
+          ctx.fillStyle = isStaggered ? "rgba(80, 0, 0, 0.9)" : "rgba(180, 20, 50, 0.95)";
+          ctx.beginPath();
+          ctx.moveTo(-25, 10);
+          ctx.quadraticCurveTo(-60, 100, -40 + Math.sin(now/200)*20, 160 + Math.cos(now/300)*10);
+          ctx.quadraticCurveTo(0, 180 + Math.sin(now/250)*15, 40 + Math.cos(now/200)*20, 160 + Math.sin(now/300)*10);
+          ctx.quadraticCurveTo(60, 100, 25, 10);
+          ctx.fill();
+          // Skirt folds/lines
+          ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(-10, 10); ctx.quadraticCurveTo(-20, 80, -10 + Math.sin(now/200)*10, 165); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(10, 10); ctx.quadraticCurveTo(20, 80, 10 + Math.cos(now/200)*10, 165); ctx.stroke();
+
+          // === VALKYRIE TORSO (ARMOR) ===
+          ctx.fillStyle = "#1a1a1a";
+          ctx.strokeStyle = isStaggered ? "#AA0000" : "#FF3366";
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(-15, -70); // Neck L
+          ctx.lineTo(15, -70); // Neck R
+          ctx.lineTo(35, -50 + breath*2); // Shoulder R
+          ctx.lineTo(25, -20); // Chest plate R
+          ctx.lineTo(25, 10); // Waist R
+          ctx.lineTo(-25, 10); // Waist L
+          ctx.lineTo(-25, -20); // Chest plate L
+          ctx.lineTo(-35, -50 + breath*2); // Shoulder L
+          ctx.closePath();
+          ctx.fill(); ctx.stroke();
+          
+          // Outer Gold Trim Pauldrons
+          ctx.strokeStyle = isStaggered ? "#555" : "gold";
+          ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.moveTo(15, -70); ctx.lineTo(35, -50 + breath*2); ctx.lineTo(25, -30); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-15, -70); ctx.lineTo(-35, -50 + breath*2); ctx.lineTo(-25, -30); ctx.stroke();
+          
+          // Armor Details & Abdomen Plating
+          ctx.strokeStyle = isStaggered ? "#AA0000" : "#FF3366";
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(0, -70); ctx.lineTo(0, 10); ctx.stroke(); // Center breastplate line
+          ctx.beginPath(); ctx.moveTo(-20, -10); ctx.lineTo(0, -5); ctx.lineTo(20, -10); ctx.stroke(); // Rib plate 1
+          ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(0, 5); ctx.lineTo(15, 0); ctx.stroke(); // Rib plate 2
+
+          // Central Ascendant Gem
+          ctx.fillStyle = isStaggered ? "red" : "#FF3366";
+          ctx.shadowColor = isStaggered ? "transparent" : "#FF3366";
+          ctx.shadowBlur = isStaggered ? 0 : 20 + Math.sin(now/100)*10;
+          ctx.beginPath(); ctx.arc(0, -40, 8, 0, Math.PI*2); ctx.fill(); 
+          ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(0, -42, 3, 0, Math.PI*2); ctx.fill(); // Highlight
           ctx.shadowBlur = 0;
-        }
-      }
+
+          // === HEAD & HALO ===
+          ctx.fillStyle = "#111"; // Make helmet base dark
+          ctx.strokeStyle = "white";
+          ctx.lineWidth = 2;
+          // Face profile / Helmet
+          ctx.beginPath();
+          ctx.arc(0, -90, 16, 0, Math.PI*2);
+          ctx.fill(); ctx.stroke();
+          
+          // Glowing Visor / Slit Eye
+          ctx.fillStyle = isStaggered ? "red" : "#FF3366";
+          ctx.shadowColor = isStaggered ? "transparent" : "#FF3366";
+          ctx.shadowBlur = isStaggered ? 0 : 15;
+          ctx.beginPath(); ctx.ellipse(0, -90, 10, 3, 0, 0, Math.PI*2); ctx.fill();
+          ctx.fillStyle = "white";
+          ctx.beginPath(); ctx.ellipse(0, -90, 4, 1, 0, 0, Math.PI*2); ctx.fill(); // Inner eye core
+          ctx.shadowBlur = 0;
+
+          // Halo
+          ctx.strokeStyle = isStaggered ? "red" : "gold";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.ellipse(0, -115 + Math.sin(now/200)*3, 25, 8, 0, 0, Math.PI*2);
+          ctx.stroke();
+
+          // === ARMS & SHOCK SHIELD ===
+          if (god.active) {
+             const shieldThrown = (god.attackType === "SHOCK_SHIELD" && god.attackState === "ACTIVE");
+             
+             // Draw arms resting backwards 
+             ctx.save();
+             // Right Arm
+             ctx.translate(35, -50 + breath*2);
+             ctx.rotate(isStaggered ? Math.PI/2 : Math.PI/6);
+             ctx.fillStyle = "#111"; ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
+             ctx.beginPath(); ctx.roundRect(-8, 0, 16, 40, 8); ctx.fill(); ctx.stroke();
+             ctx.translate(0, 35); ctx.rotate(-0.5);
+             ctx.beginPath(); ctx.roundRect(-6, 0, 12, 35, 6); ctx.fill(); ctx.stroke();
+             ctx.restore();
+             
+             // Left Arm
+             ctx.save();
+             ctx.translate(-35, -50 + breath*2);
+             ctx.rotate(isStaggered ? -Math.PI/2 : -Math.PI/6);
+             ctx.fillStyle = "#111"; ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
+             ctx.beginPath(); ctx.roundRect(-8, 0, 16, 40, 8); ctx.fill(); ctx.stroke();
+             ctx.translate(0, 35); ctx.rotate(0.5);
+             ctx.beginPath(); ctx.roundRect(-6, 0, 12, 35, 6); ctx.fill(); ctx.stroke();
+             ctx.translate(0, 35);
+             ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+             ctx.restore();
+
+             // Draw Orbiting Shock Shield OR Warning Charge
+             if (!shieldThrown && !isStaggered) {
+                // If she's charging the shield, condense it
+                const isCharging = (god.attackState === "WINDUP" && god.attackType === "SHOCK_SHIELD");
+                const shieldRadius = isCharging ? (100 - Math.min(60, (now - god.nextAttackAtMs + 600)/10)) : (90 + Math.sin(now/150)*15);
+                
+                ctx.save();
+                ctx.scale(1, 0.4); // Tilt ring into 3D perspective
+                ctx.rotate(now / 500); // Spin the ring
+                
+                // Outer ring
+                ctx.strokeStyle = `rgba(255, 50, 100, ${isCharging ? 0.9 : 0.6})`;
+                ctx.lineWidth = isCharging ? 12 : 6;
+                ctx.shadowColor = "#FF3366";
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.arc(0, 0, shieldRadius, 0, Math.PI*2);
+                ctx.stroke();
+
+                // Inner electric arcs
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([15, 25]);
+                ctx.beginPath();
+                ctx.arc(0, 0, shieldRadius - 5, -now/300, Math.PI*2 - now/300);
+                ctx.stroke();
+                
+                ctx.restore();
+             }
+          }
+
+          ctx.shadowBlur = 0;
+          ctx.restore();
+       }
+
+       // 4. Intro Dialogue Box
+       if (god.introActive && god.dialogueTimeMs > 2000) {
+          let boxAlpha = Math.min(0.8, (god.dialogueTimeMs - 2000)/500);
+          let textAlpha = 1.0;
+          
+          if (god.dialogueTimeMs > 6000) {
+             const fadeOut = 1 - (god.dialogueTimeMs - 6000) / 1000;
+             boxAlpha *= Math.max(0, fadeOut);
+             textAlpha *= Math.max(0, fadeOut);
+          }
+
+          ctx.fillStyle = `rgba(0, 0, 0, ${boxAlpha})`;
+          ctx.fillRect(0, h/2 + 100, w, 100);
+          
+          ctx.strokeStyle = `rgba(255, 255, 255, ${textAlpha})`;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(0, h/2 + 100, w, 100);
+          
+          ctx.fillStyle = `rgba(255, 255, 255, ${textAlpha})`;
+          ctx.font = "italic bold 28px monospace";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          
+          // Typewriter effect
+          const charsToShow = Math.floor((god.dialogueTimeMs - 2000) / 40);
+          const visibleText = god.dialogue.substring(0, charsToShow);
+          ctx.fillText(visibleText, w/2, h/2 + 150);
+       }
+
+       // 5. Active Combat Effects (Slashes, HUD, Orbs)
+       if (god.active) {
+           // Telegraph Effects during Windup
+           if (god.attackState === "WINDUP" && god.telegraphs) {
+              for (const tel of god.telegraphs) {
+                 if (tel.isShield) {
+                    // Draw massive circular warning for shock shield
+                    ctx.save();
+                    const isWarningPulse = Math.floor(now / 50) % 2 === 0;
+                    ctx.fillStyle = `rgba(255, 0, 0, ${isWarningPulse ? 0.3 : 0.1})`;
+                    ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(tel.x, tel.y, tel.radius, 0, Math.PI*2);
+                    ctx.fill(); ctx.stroke();
+                    ctx.restore();
+                 } else {
+                    ctx.save();
+                    ctx.translate(tel.x, tel.y);
+                    ctx.rotate(tel.angle);
+                    const isWarningPulse = Math.floor(now / 50) % 2 === 0;
+                    ctx.fillStyle = tel.isHeavy ? `rgba(255, 0, 0, ${isWarningPulse ? 0.3 : 0.1})` : `rgba(255, 100, 100, 0.2)`;
+                    
+                    // Diamond shape indicator matches exactly the hitbox
+                    ctx.beginPath();
+                    ctx.moveTo(-tel.length/2, 0);
+                    ctx.lineTo(0, -(tel.width/2));
+                    ctx.lineTo(tel.length/2, 0);
+                    ctx.lineTo(0, (tel.width/2));
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.restore();
+                 }
+              }
+           }
+          // Slash / Shield Effects
+           for (const sl of god.slashEffects) {
+              const activeRatio = sl.lifeMs / sl.maxLifeMs;
+              const expRatio = 1.0 - activeRatio; // 0.0 to 1.0
+              
+              if (sl.isShieldRun) {
+                 // Expanding Propelled Shock Shield
+                 ctx.save();
+                 const currentRadius = sl.maxRadius * expRatio;
+                 ctx.strokeStyle = `rgba(255, 50, 100, ${activeRatio})`;
+                 ctx.lineWidth = 40 * activeRatio;
+                 ctx.shadowColor = "#FF3366";
+                 ctx.shadowBlur = 30;
+                 ctx.beginPath();
+                 ctx.arc(sl.x, sl.y, currentRadius, 0, Math.PI*2);
+                 ctx.stroke();
+                 
+                 // Core inner electric string
+                 ctx.strokeStyle = `rgba(255, 255, 255, ${activeRatio})`;
+                 ctx.lineWidth = 10 * activeRatio;
+                 ctx.setLineDash([20, 40]);
+                 ctx.stroke();
+                 
+                 ctx.restore();
+              } else {
+                 // Standard Diamond Sweep
+                 ctx.save();
+                 ctx.translate(sl.x, sl.y);
+                 ctx.rotate(sl.angle);
+                 
+                 ctx.fillStyle = sl.isHeavy ? `rgba(255, 0, 50, ${activeRatio})` : `rgba(255, 255, 255, ${activeRatio})`;
+                 ctx.shadowColor = sl.isHeavy ? "red" : "white";
+                 ctx.shadowBlur = 20 * activeRatio;
+                 
+                 // Draw diamond sweep slash
+                 ctx.beginPath();
+                 ctx.moveTo(-sl.length/2, 0);
+                 ctx.lineTo(0, -(sl.width/2) * activeRatio);
+                 ctx.lineTo(sl.length/2, 0);
+                 ctx.lineTo(0, (sl.width/2) * activeRatio);
+                 ctx.fill();
+                 ctx.restore();
+              }
+           }
+          
+          // Orb Collectible
+          if (god.collectibleOrb) {
+             const orb = god.collectibleOrb;
+             ctx.shadowColor = "#FF3366"; ctx.shadowBlur = 15;
+             ctx.fillStyle = "white";
+             ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r + Math.sin(now/100)*3, 0, Math.PI*2); ctx.fill();
+             ctx.fillStyle = "#FF3366";
+             ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r*0.5, 0, Math.PI*2); ctx.fill();
+             ctx.shadowBlur = 0;
+          }
+
+          // Boss HUD
+          ctx.fillStyle = "white";
+          ctx.font = "bold 24px monospace";
+          ctx.textAlign = "center";
+          ctx.shadowColor = "red"; ctx.shadowBlur = 10;
+          ctx.fillText("THE SHOCK EMPRESS", w / 2, 40);
+          ctx.shadowBlur = 0;
+
+          // Boss HP Bar
+          ctx.fillStyle = "rgba(50, 0, 0, 0.5)";
+          ctx.fillRect(w / 2 - 200, 60, 400, 15);
+          ctx.fillStyle = "white";
+          const hpRatio = Math.max(0, god.hp / 300);
+          ctx.fillRect(w / 2 - 200, 60, 400 * hpRatio, 15);
+          ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
+          ctx.strokeRect(w / 2 - 200, 60, 400, 15);
+          
+          // Stagger UI
+          const isStaggered = elapsedMs < god.staggeredUntilMs;
+          if (isStaggered) {
+             ctx.fillStyle = "rgba(100, 255, 100, 0.2)";
+             ctx.fillRect(0,0,w,h);
+             ctx.fillStyle = "lime";
+             ctx.font = "bold 36px monospace";
+             ctx.fillText("STAGGERED! ATTACK NOW!", w/2, 120);
+          } else {
+             // Charge Bar UI
+             const chargeText = god.orbCharge >= god.orbChargeMax ? "PRESS R - SHOCKWAVE READY!" : `CHARGE: ${god.orbCharge} / ${god.orbChargeMax}`;
+             ctx.fillStyle = god.orbCharge >= god.orbChargeMax ? "#FF3366" : "rgba(255, 255, 255, 0.8)";
+             ctx.font = god.orbCharge >= god.orbChargeMax ? "bold 24px monospace" : "18px monospace";
+             if (god.orbCharge >= god.orbChargeMax && Math.floor(now / 100) % 2 === 0) {
+               ctx.fillStyle = "white";
+               ctx.shadowColor = "#FF3366"; ctx.shadowBlur = 20;
+             }
+             ctx.fillText(chargeText, w / 2, h - 40);
+             ctx.shadowBlur = 0;
+          }
+       }
     }
 
     // Draw Powerup
@@ -3687,15 +3687,15 @@ export default function Game({
 
     // Draw Dash Trail
     for (const tr of playerTrailRef.current) {
-      const trFade = Math.max(0, tr.lifeMs / tr.maxLifeMs);
-      ctx.save();
-      ctx.translate(tr.x, tr.y);
-      ctx.globalAlpha = trFade * 0.5;
-      ctx.fillStyle = "rgba(255, 150, 200, 1)";
-      ctx.shadowColor = "#FF3366";
-      ctx.shadowBlur = 15;
-      drawHeart(ctx, 0, 0, 10 + (1 - trFade) * 5); // slightly expands as it fades
-      ctx.restore();
+        const trFade = Math.max(0, tr.lifeMs / tr.maxLifeMs);
+        ctx.save();
+        ctx.translate(tr.x, tr.y);
+        ctx.globalAlpha = trFade * 0.5;
+        ctx.fillStyle = "rgba(255, 150, 200, 1)";
+        ctx.shadowColor = "#FF3366";
+        ctx.shadowBlur = 15;
+        drawHeart(ctx, 0, 0, 10 + (1 - trFade) * 5); // slightly expands as it fades
+        ctx.restore();
     }
 
     // player heart (KEEP ORIGINAL COLOR)
@@ -3781,7 +3781,7 @@ export default function Game({
   // Compute guard status for HUD display
   const guardCdRem = Math.max(0, guardCdUntilRef.current - nowMs);
   const guardStatus = guardCdRem <= 0 ? "READY" : (guardCdRem / 1000).toFixed(1) + "s";
-
+  
   // Compute dash status for HUD display
   const dashRem = dashRef.current ? Math.max(0, dashRef.current.cooldownUntil - nowMs) : 0;
   const dashStatus = dashRem <= 0 ? "READY" : (dashRem / 1000).toFixed(1) + "s";
@@ -3883,100 +3883,100 @@ export default function Game({
             isStandaloneSans={isStandaloneSans}
           />
 
-          {/* Menu Phase: Top HUD */}
-          {phase === PHASE.MENU && (
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/20">
-              <div className="flex items-center gap-3">
-                <div className="text-sm">
-                  <div className="text-white/60 text-xs">HP</div>
-                  <div className="font-semibold">{hp}</div>
-                </div>
-                <div className="h-8 w-px bg-white/20" />
-                <div className="text-sm">
-                  <div className="text-white/60 text-xs">Survival</div>
-                  <div className="font-semibold">0:00</div>
-                </div>
+        {/* Menu Phase: Top HUD */}
+        {phase === PHASE.MENU && (
+           <div className="flex items-center justify-between px-4 py-3 border-b border-white/20">
+             <div className="flex items-center gap-3">
+               <div className="text-sm">
+                 <div className="text-white/60 text-xs">HP</div>
+                 <div className="font-semibold">{hp}</div>
+               </div>
+               <div className="h-8 w-px bg-white/20" />
+               <div className="text-sm">
+                 <div className="text-white/60 text-xs">Survival</div>
+                 <div className="font-semibold">0:00</div>
+               </div>
+             </div>
+             <div className="flex items-center gap-2">
+               <button
+                 onClick={() => {
+                   ensureRadianceMusicStoppedImmediately();
+                   exitToMenu();
+                 }}
+                 className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
+               >
+                 Exit
+               </button>
+             </div>
+           </div>
+        )}
+
+        {/* Non-PLAYING phases: show room info when applicable */}
+        {phase !== PHASE.PLAYING && phase !== PHASE.MENU && (
+           <div className="flex items-center justify-between px-4 py-2 border-b border-white/20 bg-black/40">
+             <div className="text-xs text-white/60">
+               Room: <span className="text-white/80 font-mono">{roomId ? roomId.slice(0, 20) + "…" : "—"}</span>
+             </div>
+             <div className="flex items-center gap-2">
+               <button
+                 onClick={() => {
+                   ensureRadianceMusicStoppedImmediately();
+                   exitToMenu();
+                 }}
+                 className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
+               >
+                 Exit
+               </button>
+             </div>
+           </div>
+        )}
+
+        {/* Main Game Container */}
+        <div className="relative w-full rounded-2xl border border-white/30 bg-black shadow-xl overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            width={980}
+            height={540}
+            className="w-full h-auto block max-w-full"
+            style={{ aspectRatio: '980/540' }}
+          />
+
+          {/* Bottom Left: Cooldown HUD */}
+          {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
+            <div className="absolute bottom-6 left-6 flex flex-col gap-2.5 pointer-events-none z-10 w-48">
+              <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${dashRem <= 0 ? 'bg-lime-900/40 border-lime-500/50' : 'bg-black/60 border-white/10'}`}>
+                <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">DASH</span>
+                <span className={`font-mono font-black text-sm ${dashRem <= 0 ? 'text-lime-400 drop-shadow-[0_0_8px_rgba(100,255,100,0.8)]' : 'text-red-400'}`}>
+                  {dashRem <= 0 ? "READY" : (dashRem / 1000).toFixed(1) + "s"}
+                </span>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    ensureRadianceMusicStoppedImmediately();
-                    exitToMenu();
-                  }}
-                  className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
-                >
-                  Exit
-                </button>
+              <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${guardStatus === "READY" ? 'bg-cyan-900/40 border-cyan-500/50' : 'bg-black/60 border-white/10'}`}>
+                <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">GUARD</span>
+                <span className={`font-mono font-black text-sm ${guardStatus === "READY" ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(0,255,255,0.8)]' : 'text-white/40'}`}>
+                  {guardStatus}
+                </span>
               </div>
             </div>
           )}
 
-          {/* Non-PLAYING phases: show room info when applicable */}
-          {phase !== PHASE.PLAYING && phase !== PHASE.MENU && (
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/20 bg-black/40">
-              <div className="text-xs text-white/60">
-                Room: <span className="text-white/80 font-mono">{roomId ? roomId.slice(0, 20) + "…" : "—"}</span>
+          {/* Bottom Right: Controls Legend */}
+          {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
+            <div className="absolute bottom-6 right-6 flex flex-col items-end gap-2 pointer-events-none z-10 text-right opacity-70">
+              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
+                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">MOVE</span>
+                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">WASD</span>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    ensureRadianceMusicStoppedImmediately();
-                    exitToMenu();
-                  }}
-                  className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
-                >
-                  Exit
-                </button>
+              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
+                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">DASH</span>
+                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SHIFT</span>
+              </div>
+              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
+                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">GUARD</span>
+                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SPACE</span>
               </div>
             </div>
           )}
-
-          {/* Main Game Container */}
-          <div className="relative w-full rounded-2xl border border-white/30 bg-black shadow-xl overflow-hidden">
-            <canvas
-              ref={canvasRef}
-              width={980}
-              height={540}
-              className="w-full h-auto block max-w-full"
-              style={{ aspectRatio: '980/540' }}
-            />
-
-            {/* Bottom Left: Cooldown HUD */}
-            {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
-              <div className="absolute bottom-6 left-6 flex flex-col gap-2.5 pointer-events-none z-10 w-48">
-                <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${dashRem <= 0 ? 'bg-lime-900/40 border-lime-500/50' : 'bg-black/60 border-white/10'}`}>
-                  <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">DASH</span>
-                  <span className={`font-mono font-black text-sm ${dashRem <= 0 ? 'text-lime-400 drop-shadow-[0_0_8px_rgba(100,255,100,0.8)]' : 'text-red-400'}`}>
-                    {dashRem <= 0 ? "READY" : (dashRem / 1000).toFixed(1) + "s"}
-                  </span>
-                </div>
-                <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${guardStatus === "READY" ? 'bg-cyan-900/40 border-cyan-500/50' : 'bg-black/60 border-white/10'}`}>
-                  <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">GUARD</span>
-                  <span className={`font-mono font-black text-sm ${guardStatus === "READY" ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(0,255,255,0.8)]' : 'text-white/40'}`}>
-                    {guardStatus}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Bottom Right: Controls Legend */}
-            {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
-              <div className="absolute bottom-6 right-6 flex flex-col items-end gap-2 pointer-events-none z-10 text-right opacity-70">
-                <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
-                  <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">MOVE</span>
-                  <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">WASD</span>
-                </div>
-                <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
-                  <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">DASH</span>
-                  <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SHIFT</span>
-                </div>
-                <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
-                  <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">GUARD</span>
-                  <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SPACE</span>
-                </div>
-              </div>
-            )}
-          </div>
+        </div>
 
           {/* MENU Overlay - not shown for time trial */}
           {phase === PHASE.MENU && mode !== "timeTrial" && (
@@ -4198,4 +4198,3 @@ function drawHeart(ctx, x, y, s) {
   ctx.closePath();
   ctx.fill();
 }
-

@@ -428,6 +428,8 @@ export default function Game({
   });
 
   const shakeRef = useRef({ until: 0, amp: 0 });
+  const dashRef = useRef({ active: false, until: 0, cooldownUntil: 0, dirX: 0, dirY: 0 });
+  const playerTrailRef = useRef([]);
 
   const maxHpRef = useRef(100);
   const radianceBossRef = useRef({
@@ -1182,6 +1184,8 @@ export default function Game({
     corruptHealUntilRef.current = 0;
 
     shakeRef.current = { until: 0, amp: 0 };
+    dashRef.current = { active: false, until: 0, cooldownUntil: 0, dirX: 0, dirY: 0, lastDx: 1, lastDy: 0 };
+    playerTrailRef.current = [];
     maxHpRef.current = 100;
     radianceBossRef.current = {
       triggered: false,
@@ -1575,10 +1579,9 @@ export default function Game({
     loop._lastNow = now;
 
     const keys = keysRef.current;
-    const slow = keys.has("shift");
-    let ax = 0,
-      ay = 0;
-
+    
+    // Evaluate base movement axis from keys
+    let ax = 0, ay = 0;
     if (keys.has("w") || keys.has("arrowup")) ay -= 1;
     if (keys.has("s") || keys.has("arrowdown")) ay += 1;
     if (keys.has("a") || keys.has("arrowleft")) ax -= 1;
@@ -1588,11 +1591,71 @@ export default function Game({
     ax /= len;
     ay /= len;
 
-    const speed = slow ? 150 : 260;
+    const speed = 260; // Base speed, slow removed
 
     const p = playerRef.current;
-    p.x = clamp(p.x + ax * speed * dt, 18, w - 18);
-    p.y = clamp(p.y + ay * speed * dt, 18, h - 18);
+    
+    // Dash Mechanics
+    const DASH_DURATION = 160;
+    const DASH_SPEED = 900;
+    const DASH_COOLDOWN = 2000;
+    
+    if (keys.has("shift") && !dashRef.current.active && now > dashRef.current.cooldownUntil) {
+       // Determine Dash Direction
+       let dx = ax;
+       let dy = ay;
+       
+       // If standing still, dash in the direction we were last facing (or default right)
+       if (dx === 0 && dy === 0) {
+          dx = dashRef.current.lastDx || 1;
+          dy = dashRef.current.lastDy || 0;
+       }
+       
+       // Normalize dash direction
+       const dLen = Math.hypot(dx, dy) || 1;
+       dx /= dLen;
+       dy /= dLen;
+       
+       dashRef.current = {
+          active: true,
+          until: now + DASH_DURATION,
+          cooldownUntil: now + DASH_COOLDOWN,
+          dirX: dx,
+          dirY: dy,
+          lastDx: dx, // cache for static dashes
+          lastDy: dy
+       };
+       playHitSound(); // Optional small sound feedback on dash
+    } else if (ax !== 0 || ay !== 0) {
+       // Cache last movement direction while walking to use if we dash from a standstill
+       dashRef.current.lastDx = ax;
+       dashRef.current.lastDy = ay;
+    }
+
+    // Apply Movement
+    if (dashRef.current.active && now < dashRef.current.until) {
+       // Executing Dash Movement
+       p.x += dashRef.current.dirX * DASH_SPEED * dt;
+       p.y += dashRef.current.dirY * DASH_SPEED * dt;
+       
+       // Create trail
+       playerTrailRef.current.push({ x: p.x, y: p.y, lifeMs: 200, maxLifeMs: 200 });
+    } else {
+       // Normal Movement
+       dashRef.current.active = false;
+       p.x += ax * speed * dt;
+       p.y += ay * speed * dt;
+    }
+    
+    p.x = clamp(p.x, 18, w - 18);
+    p.y = clamp(p.y, 18, h - 18);
+    
+    // Process Trail Lifetimes
+    for (let i = playerTrailRef.current.length - 1; i >= 0; i--) {
+       const tr = playerTrailRef.current[i];
+       tr.lifeMs -= dt * 1000;
+       if (tr.lifeMs <= 0) playerTrailRef.current.splice(i, 1);
+    }
     // Calculate difficulty factor: 0 at start, 1 at 120 seconds (slower progression)
     let difficulty = 0;
     let elapsedMs = 0;
@@ -3552,6 +3615,19 @@ export default function Game({
       ctx.setLineDash([]);
     }
 
+    // Draw Dash Trail
+    for (const tr of playerTrailRef.current) {
+        const trFade = Math.max(0, tr.lifeMs / tr.maxLifeMs);
+        ctx.save();
+        ctx.translate(tr.x, tr.y);
+        ctx.globalAlpha = trFade * 0.5;
+        ctx.fillStyle = "rgba(255, 150, 200, 1)";
+        ctx.shadowColor = "#FF3366";
+        ctx.shadowBlur = 15;
+        drawHeart(ctx, 0, 0, 10 + (1 - trFade) * 5); // slightly expands as it fades
+        ctx.restore();
+    }
+
     // player heart (KEEP ORIGINAL COLOR)
     const iframe = isIFrameActive(now);
     ctx.save();
@@ -3635,6 +3711,10 @@ export default function Game({
   // Compute guard status for HUD display
   const guardCdRem = Math.max(0, guardCdUntilRef.current - nowMs);
   const guardStatus = guardCdRem <= 0 ? "READY" : (guardCdRem / 1000).toFixed(1) + "s";
+  
+  // Compute dash status for HUD display
+  const dashRem = dashRef.current ? Math.max(0, dashRef.current.cooldownUntil - nowMs) : 0;
+  const dashStatus = dashRem <= 0 ? "READY" : (dashRem / 1000).toFixed(1) + "s";
 
   // derive text for summary card
   const lastResult = lastResultRef.current;
@@ -3750,8 +3830,10 @@ export default function Game({
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-xs text-white/60">
-                  Controls: <span className="text-white">WASD/Arrows</span> •{" "}
-                  <span className="text-white">Shift</span> slow
+                  Controls: <span className="text-white">WASD</span> •{" "}
+                  <span className={`font-semibold ${dashRem <= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    Shift Dash: {dashStatus}
+                  </span>
                 </div>
                 <button
                   onClick={() => {
@@ -3774,8 +3856,10 @@ export default function Game({
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-xs text-white/60">
-                  Controls: <span className="text-white">WASD/Arrows</span> •{" "}
-                  <span className="text-white">Shift</span> slow
+                  Controls: <span className="text-white">WASD</span> •{" "}
+                  <span className={`font-semibold ${dashRem <= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    Shift Dash: {dashStatus}
+                  </span>
                 </div>
                 <button
                   onClick={() => {

@@ -5,6 +5,7 @@ import { submitTimeTrial, unlockBoss } from "./api";
 import RankBadge from "./ui/RankBadge";
 import RankChangeToast from "./ui/RankChangeToast";
 import radianceMusicAsset from "../assets/music/RadiantBossFight.mp3";
+import goddessMusicAsset from "../assets/music/GoddessBossFight.mp3";
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
@@ -231,6 +232,11 @@ export default function Game({
   const radianceFadeRef = useRef(null);
   const radianceMusicStartedRef = useRef(false);
 
+  // ====== Goddess Boss Music Setup ======
+  const goddessMusicRef = useRef(null);
+  const goddessFadeRef = useRef(null);
+  const goddessMusicStartedRef = useRef(false);
+
   useEffect(() => {
     const audio = new Audio(radianceMusicAsset);
     audio.loop = true;
@@ -238,9 +244,17 @@ export default function Game({
     audio.preload = "auto";
     radianceMusicRef.current = audio;
 
+    const gAudio = new Audio(goddessMusicAsset);
+    gAudio.loop = true;
+    gAudio.volume = 0;
+    gAudio.preload = "auto";
+    goddessMusicRef.current = gAudio;
+
     return () => {
       ensureRadianceMusicStoppedImmediately();
+      ensureGoddessMusicStoppedImmediately();
       radianceMusicRef.current = null;
+      goddessMusicRef.current = null;
     };
   }, []);
 
@@ -256,12 +270,27 @@ export default function Game({
     audio.volume = 0.02;
     audio.play().catch(() => {});
     
-    // Fade in over 5s to 0.4
-    fadeAudioTo(audio, 0.4, 5000);
+    fadeAudioTo(audio, 0.4, 5000, radianceFadeRef);
   }
 
-  function fadeAudioTo(audio, targetVolume, durationMs, onDone) {
-    if (radianceFadeRef.current) clearInterval(radianceFadeRef.current);
+  function startGoddessMusic() {
+    if (!goddessMusicRef.current || goddessMusicStartedRef.current) return;
+    goddessMusicStartedRef.current = true;
+    
+    const audio = goddessMusicRef.current;
+    
+    // Clear any existing fades
+    if (goddessFadeRef.current) clearInterval(goddessFadeRef.current);
+    
+    audio.volume = 0.02;
+    audio.play().catch(() => {});
+    
+    // Fade in over 5s to 0.4
+    fadeAudioTo(audio, 0.4, 5000, goddessFadeRef);
+  }
+
+  function fadeAudioTo(audio, targetVolume, durationMs, reqFadeRef, onDone) {
+    if (reqFadeRef.current) clearInterval(reqFadeRef.current);
     
     const startVol = audio.volume;
     const diff = targetVolume - startVol;
@@ -270,7 +299,7 @@ export default function Game({
     const volStep = diff / steps;
     
     let currentStep = 0;
-    radianceFadeRef.current = setInterval(() => {
+    reqFadeRef.current = setInterval(() => {
       currentStep++;
       let nextVol = startVol + (volStep * currentStep);
       nextVol = clamp(nextVol, 0, 1);
@@ -278,8 +307,8 @@ export default function Game({
       try { audio.volume = nextVol; } catch (e) {}
 
       if (currentStep >= steps) {
-        clearInterval(radianceFadeRef.current);
-        radianceFadeRef.current = null;
+        clearInterval(reqFadeRef.current);
+        reqFadeRef.current = null;
         if (targetVolume === 0) {
           audio.pause();
         }
@@ -291,7 +320,7 @@ export default function Game({
   function stopRadianceMusic() {
     if (!radianceMusicRef.current || !radianceMusicStartedRef.current) return;
     radianceMusicStartedRef.current = false;
-    fadeAudioTo(radianceMusicRef.current, 0, 2000, () => {
+    fadeAudioTo(radianceMusicRef.current, 0, 2000, radianceFadeRef, () => {
       if (radianceMusicRef.current) {
         radianceMusicRef.current.pause();
         radianceMusicRef.current.currentTime = 0;
@@ -306,6 +335,31 @@ export default function Game({
       radianceFadeRef.current = null;
     }
     const audio = radianceMusicRef.current;
+    if (audio) {
+      try { audio.volume = 0; } catch (e) {}
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  }
+
+  function stopGoddessMusic() {
+    if (!goddessMusicRef.current || !goddessMusicStartedRef.current) return;
+    goddessMusicStartedRef.current = false;
+    fadeAudioTo(goddessMusicRef.current, 0, 2000, goddessFadeRef, () => {
+      if (goddessMusicRef.current) {
+        goddessMusicRef.current.pause();
+        goddessMusicRef.current.currentTime = 0;
+      }
+    });
+  }
+
+  function ensureGoddessMusicStoppedImmediately() {
+    goddessMusicStartedRef.current = false;
+    if (goddessFadeRef.current) {
+      clearInterval(goddessFadeRef.current);
+      goddessFadeRef.current = null;
+    }
+    const audio = goddessMusicRef.current;
     if (audio) {
       try { audio.volume = 0; } catch (e) {}
       audio.pause();
@@ -2073,13 +2127,17 @@ export default function Game({
            }
         }
         
-        // Phase C: Goddess Descent (7000ms to 11000ms)
+        // Phase C: Goddess Descent (7000ms to 14000ms)
         if (god.introActive) {
            const incTime = elapsedMs - god.introStartMs;
            god.dialogueTimeMs = incTime;
-           if (incTime > 4000) {
+           if (incTime > 7000) {
               god.introActive = false;
               god.active = true;
+              
+              // Custom start music cleanly here exactly once
+              startGoddessMusic();
+
               god.nextAttackAtMs = elapsedMs + 1000;
               god.hp = 300; // Tripled HP
               god.x = w / 2;
@@ -2450,11 +2508,14 @@ export default function Game({
                god.bodyTouchCdUntilMs = elapsedMs + 400; // Invincibility frames for boss
                playHitSound();
                addShake(15, 200);
-               
                if (god.hp <= 0) {
                   god.active = false;
                   god.defeated = true;
                   god.bossDeathAnimUntil = elapsedMs + 1500;
+                  
+                  // Stop music cleanly
+                  stopGoddessMusic();
+
                   // Reward Max HP +50 strictly to local player performing the kill
                   maxHpRef.current += 50;
                   setHp(maxHpRef.current);
@@ -3379,14 +3440,26 @@ export default function Game({
 
        // 4. Intro Dialogue Box
        if (god.introActive && god.dialogueTimeMs > 2000) {
-          ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(0.8, (god.dialogueTimeMs - 2000)/500)})`;
+          let boxAlpha = Math.min(0.8, (god.dialogueTimeMs - 2000)/500);
+          let textAlpha = 1.0;
+          
+          if (god.dialogueTimeMs > 6000) {
+             const fadeOut = 1 - (god.dialogueTimeMs - 6000) / 1000;
+             boxAlpha *= Math.max(0, fadeOut);
+             textAlpha *= Math.max(0, fadeOut);
+          }
+
+          ctx.fillStyle = `rgba(0, 0, 0, ${boxAlpha})`;
           ctx.fillRect(0, h/2 + 100, w, 100);
-          ctx.strokeStyle = "white"; ctx.lineWidth = 2;
+          
+          ctx.strokeStyle = `rgba(255, 255, 255, ${textAlpha})`;
+          ctx.lineWidth = 2;
           ctx.strokeRect(0, h/2 + 100, w, 100);
           
-          ctx.fillStyle = "white";
+          ctx.fillStyle = `rgba(255, 255, 255, ${textAlpha})`;
           ctx.font = "italic bold 28px monospace";
           ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          
           // Typewriter effect
           const charsToShow = Math.floor((god.dialogueTimeMs - 2000) / 40);
           const visibleText = god.dialogue.substring(0, charsToShow);

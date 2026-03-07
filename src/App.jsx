@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getMe, requestOtp, verifyOtp, updateUsername } from "./api";
 import Game from "./Game";
-import { setSocketToken, socket } from "./socket";
+import { setSocketToken, connectSocketIfTokenExists, socket } from "./socket";
 import FriendsPanel from "./FriendsPanel";
 import LeaderboardPanel from "./LeaderboardPanel";
 import NotificationsModal from "./NotificationsModal";
@@ -75,6 +75,10 @@ export default function App() {
   // Wake server on app load (for Render free tier)
   useEffect(() => {
     fetch(`${API_URL}/`, { method: "GET" }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    connectSocketIfTokenExists();
   }, []);
 
   // Socket connection diagnostics
@@ -185,6 +189,7 @@ export default function App() {
   function logout() {
     localStorage.removeItem("sd_token");
     setToken("");
+    setSocketToken("");
     setMe(null);
     setView(VIEW.LOGIN);
   }

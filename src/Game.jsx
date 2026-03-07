@@ -2053,10 +2053,11 @@ export default function Game({
              if (elapsedMs >= god.nextAttackAtMs && !god.attackState) {
                 // Pick next attack
                 const choice = Math.random();
-                if (choice < 0.35) god.attackType = "NORMAL";
-                else if (choice < 0.65) god.attackType = "HEAVY";
-                else if (choice < 0.85) god.attackType = "POWER";
-                else god.attackType = "ULTIMATE";
+                if (choice < 0.25) god.attackType = "NORMAL";
+                else if (choice < 0.50) god.attackType = "HEAVY";
+                else if (choice < 0.70) god.attackType = "POWER";
+                else if (choice < 0.85) god.attackType = "ULTIMATE";
+                else god.attackType = "SHOCK_SHIELD";
 
                 god.attackState = "WINDUP";
                 god.nextAttackAtMs = elapsedMs + 400; // Faster Windup duration
@@ -2084,6 +2085,11 @@ export default function Game({
                    for(let i=0; i<8; i++) {
                       god.telegraphs.push({ x: w/2, y: h/2, angle: (Math.PI/4)*i + Math.PI/8, length: 1500, width: 60, isHeavy: true });
                    }
+                } else if (god.attackType === "SHOCK_SHIELD") {
+                   playLaserChargeSound();
+                   addShake(10, 600);
+                   god.nextAttackAtMs = elapsedMs + 600; // Shield charge up
+                   god.telegraphs.push({ isShield: true, x: god.x, y: god.y, radius: 400 });
                 }
              } else if (elapsedMs >= god.nextAttackAtMs && god.attackState === "WINDUP") {
                 // Execute Attack
@@ -2124,12 +2130,24 @@ export default function Game({
                       god.slashEffects.push({ ...tel, lifeMs: 1200, maxLifeMs: 1200, spawnedAtMs: elapsedMs });
                    }
                    god.nextAttackAtMs = elapsedMs + 1200; // Faster Ultimate recovery
+                } else if (god.attackType === "SHOCK_SHIELD") {
+                   // Propel the shield outward across the arena
+                   playLaserFireSound();
+                   addShake(30, 800);
+                   // Create an expanding ring attack
+                   god.slashEffects.push({ isShieldRun: true, x: god.x, y: god.y, maxRadius: 1500, lifeMs: 1000, maxLifeMs: 1000, spawnedAtMs: elapsedMs });
+                   god.nextAttackAtMs = elapsedMs + 1500; // Long recovery
+                   // The shield exertion causes her to slow down her combat pace briefly
+                   god.shieldSlowUntilMs = elapsedMs + 6000;
                 }
                 god.telegraphs = []; // Clear visual locks
              } else if (elapsedMs >= god.nextAttackAtMs && god.attackState === "ACTIVE") {
                 // Cleanup and reset for next attack
                 god.attackState = null;
-                god.nextAttackAtMs = elapsedMs + 600 + rngRef.current() * 600; // Aggressive Idle
+                const baseIdle = 600 + rngRef.current() * 600;
+                // If she recently threw her shield, heavily decelerate her next attacks
+                const penalty = (elapsedMs < god.shieldSlowUntilMs) ? 2000 : 0;
+                god.nextAttackAtMs = elapsedMs + baseIdle + penalty;
              }
           }
 
@@ -2179,7 +2197,7 @@ export default function Game({
         }
       }
 
-      const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE" || rad.warning || rad.active || god.triggered || mode === "boss";
+      const isBossTime = boss.state === "WARNING" || boss.state === "ACTIVE" || rad.warning || rad.active || (god.triggered && !god.defeated) || mode === "boss";
       const isLaserRoundPause = lr.warning || lr.active;
 
       let guard = 0;
@@ -2400,23 +2418,36 @@ export default function Game({
          // Slash Effect Damage Player Hitbox
          if (!tookHit && elapsedMs > god.bossTouchDamageCdUntilMs) {
             for (const sl of god.slashEffects) {
-                // Using distance to line segment approximation
-                // Transform p to slash local space
-                const px = p.x - sl.x;
-                const py = p.y - sl.y;
-                const cost = Math.cos(-sl.angle);
-                const sint = Math.sin(-sl.angle);
-                const nx = px * cost - py * sint;
-                const ny = px * sint + py * cost;
-                
-                // Active timeframe (only hurt when slash is bright, not fading out heavily)
-                const activeRatio = sl.lifeMs / sl.maxLifeMs;
-                if (activeRatio > 0.4) {
-                   if (nx > -sl.length/2 && nx < sl.length/2 && Math.abs(ny) < sl.width/2 + p.r) {
-                      tookHit = true; 
-                      applyDamage(sl.isHeavy ? 35 : 20, null);
+                // Check for expanding shield collision
+                if (sl.isShieldRun) {
+                   const currentRadius = sl.maxRadius * (1.0 - (sl.lifeMs / sl.maxLifeMs));
+                   const distToCenter = Math.hypot(p.x - sl.x, p.y - sl.y);
+                   const shieldThickness = 40 * (sl.lifeMs / sl.maxLifeMs); // Matches visual thickness
+                   if (distToCenter > currentRadius - shieldThickness / 2 - p.r && distToCenter < currentRadius + shieldThickness / 2 + p.r) {
+                      tookHit = true;
+                      applyDamage(30, null); // High damage for shield
                       god.bossTouchDamageCdUntilMs = elapsedMs + 500;
                       break;
+                   }
+                } else {
+                   // Using distance to line segment approximation
+                   // Transform p to slash local space
+                   const px = p.x - sl.x;
+                   const py = p.y - sl.y;
+                   const cost = Math.cos(-sl.angle);
+                   const sint = Math.sin(-sl.angle);
+                   const nx = px * cost - py * sint;
+                   const ny = px * sint + py * cost;
+                   
+                   // Active timeframe (only hurt when slash is bright, not fading out heavily)
+                   const activeRatio = sl.lifeMs / sl.maxLifeMs;
+                   if (activeRatio > 0.4) {
+                      if (nx > -sl.length/2 && nx < sl.length/2 && Math.abs(ny) < sl.width/2 + p.r) {
+                         tookHit = true; 
+                         applyDamage(sl.isHeavy ? 35 : 20, null);
+                         god.bossTouchDamageCdUntilMs = elapsedMs + 500;
+                         break;
+                      }
                    }
                 }
             }
@@ -3224,58 +3255,62 @@ export default function Game({
           ctx.ellipse(0, -115 + Math.sin(now/200)*3, 25, 8, 0, 0, Math.PI*2);
           ctx.stroke();
 
-          // === ARMS & SWORD ===
+          // === ARMS & SHOCK SHIELD ===
           if (god.active) {
+             const shieldThrown = (god.attackType === "SHOCK_SHIELD" && god.attackState === "ACTIVE");
+             
+             // Draw arms resting backwards 
              ctx.save();
-             // Right arm (holding sword)
-             ctx.translate(35, -50 + breath*2); // Start at right shoulder
-             
-             // Point sword towards player if not staggered
-             let angleToPlayer = Math.atan2(p.y - gy, p.x - gx);
-             let armRot = isStaggered ? Math.PI/2 : (angleToPlayer - Math.PI/4);
-             ctx.rotate(armRot);
-             
-             // Draw upper arm
+             // Right Arm
+             ctx.translate(35, -50 + breath*2);
+             ctx.rotate(isStaggered ? Math.PI/2 : Math.PI/6);
              ctx.fillStyle = "#111"; ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
              ctx.beginPath(); ctx.roundRect(-8, 0, 16, 40, 8); ctx.fill(); ctx.stroke();
-             
-             // Translate to elbow, draw forearm & hand holding sword
-             ctx.translate(0, 35);
+             ctx.translate(0, 35); ctx.rotate(-0.5);
              ctx.beginPath(); ctx.roundRect(-6, 0, 12, 35, 6); ctx.fill(); ctx.stroke();
-             ctx.translate(0, 35); // Hand position
+             ctx.restore();
              
-             // Hand
-             ctx.fillStyle = "white";
-             ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+             // Left Arm
+             ctx.save();
+             ctx.translate(-35, -50 + breath*2);
+             ctx.rotate(isStaggered ? -Math.PI/2 : -Math.PI/6);
+             ctx.fillStyle = "#111"; ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
+             ctx.beginPath(); ctx.roundRect(-8, 0, 16, 40, 8); ctx.fill(); ctx.stroke();
+             ctx.translate(0, 35); ctx.rotate(0.5);
+             ctx.beginPath(); ctx.roundRect(-6, 0, 12, 35, 6); ctx.fill(); ctx.stroke();
+             ctx.translate(0, 35);
+             ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill();
+             ctx.restore();
 
-             // The Ascended Blade (Held tightly)
-             ctx.rotate(Math.PI/4); // Twist blade forward
-             ctx.shadowColor = "white"; ctx.shadowBlur = isStaggered ? 5 : 25;
-             // Blade
-             ctx.beginPath(); ctx.moveTo(-10, 30); ctx.lineTo(10, 30); ctx.lineTo(15, -200); ctx.lineTo(0, -250); ctx.lineTo(-15, -200); ctx.fill();
-             // Runic center glowing line
-             ctx.fillStyle = isStaggered ? "#330000" : "#FF3366";
-             ctx.fillRect(-2, -190, 4, 210);
-             // Crossguard
-             ctx.fillStyle = isStaggered ? "#222" : "#111";
-             ctx.fillRect(-45, 10, 90, 12);
-             // Pommel
-             ctx.beginPath(); ctx.arc(0, 45, 12, 0, Math.PI*2); ctx.fill();
-             
-             ctx.restore();
-             
-             // Left arm (free/casting)
-             ctx.save();
-             ctx.translate(-35, -50 + breath*2); // Left shoulder
-             ctx.rotate(isStaggered ? -Math.PI/2 : Math.sin(now/250)*0.5 - 0.5);
-             ctx.fillStyle = "#111"; ctx.strokeStyle = "#FF3366"; ctx.lineWidth = 2;
-             ctx.beginPath(); ctx.roundRect(-8, 0, 16, 40, 8); ctx.fill(); ctx.stroke();
-             ctx.translate(0, 35);
-             ctx.rotate(-0.5); // bend elbow
-             ctx.beginPath(); ctx.roundRect(-6, 0, 12, 35, 6); ctx.fill(); ctx.stroke();
-             ctx.translate(0, 35);
-             ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI*2); ctx.fill(); // Glowing hand
-             ctx.restore();
+             // Draw Orbiting Shock Shield OR Warning Charge
+             if (!shieldThrown && !isStaggered) {
+                // If she's charging the shield, condense it
+                const isCharging = (god.attackState === "WINDUP" && god.attackType === "SHOCK_SHIELD");
+                const shieldRadius = isCharging ? (100 - Math.min(60, (now - god.nextAttackAtMs + 600)/10)) : (90 + Math.sin(now/150)*15);
+                
+                ctx.save();
+                ctx.scale(1, 0.4); // Tilt ring into 3D perspective
+                ctx.rotate(now / 500); // Spin the ring
+                
+                // Outer ring
+                ctx.strokeStyle = `rgba(255, 50, 100, ${isCharging ? 0.9 : 0.6})`;
+                ctx.lineWidth = isCharging ? 12 : 6;
+                ctx.shadowColor = "#FF3366";
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.arc(0, 0, shieldRadius, 0, Math.PI*2);
+                ctx.stroke();
+
+                // Inner electric arcs
+                ctx.strokeStyle = "white";
+                ctx.lineWidth = 3;
+                ctx.setLineDash([15, 25]);
+                ctx.beginPath();
+                ctx.arc(0, 0, shieldRadius - 5, -now/300, Math.PI*2 - now/300);
+                ctx.stroke();
+                
+                ctx.restore();
+             }
           }
 
           ctx.shadowBlur = 0;
@@ -3300,50 +3335,86 @@ export default function Game({
 
        // 5. Active Combat Effects (Slashes, HUD, Orbs)
        if (god.active) {
-          // Telegraph Effects during Windup
-          if (god.attackState === "WINDUP" && god.telegraphs) {
-             for (const tel of god.telegraphs) {
-                ctx.save();
-                ctx.translate(tel.x, tel.y);
-                ctx.rotate(tel.angle);
-                const isWarningPulse = Math.floor(now / 50) % 2 === 0;
-                ctx.fillStyle = tel.isHeavy ? `rgba(255, 0, 0, ${isWarningPulse ? 0.3 : 0.1})` : `rgba(255, 100, 100, 0.2)`;
-                
-                // Diamond shape indicator matches exactly the hitbox
-                ctx.beginPath();
-                ctx.moveTo(-tel.length/2, 0);
-                ctx.lineTo(0, -(tel.width/2));
-                ctx.lineTo(tel.length/2, 0);
-                ctx.lineTo(0, (tel.width/2));
-                ctx.fill();
-                
-                ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
-                ctx.lineWidth = 1;
-                ctx.stroke();
-                ctx.restore();
-             }
-          }
-
-          // Slash Effects
-          for (const sl of god.slashEffects) {
-             ctx.save();
-             ctx.translate(sl.x, sl.y);
-             ctx.rotate(sl.angle);
-             const activeRatio = sl.lifeMs / sl.maxLifeMs;
-             
-             ctx.fillStyle = sl.isHeavy ? `rgba(255, 0, 50, ${activeRatio})` : `rgba(255, 255, 255, ${activeRatio})`;
-             ctx.shadowColor = sl.isHeavy ? "red" : "white";
-             ctx.shadowBlur = 20 * activeRatio;
-             
-             // Draw diamond sweep slash
-             ctx.beginPath();
-             ctx.moveTo(-sl.length/2, 0);
-             ctx.lineTo(0, -(sl.width/2) * activeRatio);
-             ctx.lineTo(sl.length/2, 0);
-             ctx.lineTo(0, (sl.width/2) * activeRatio);
-             ctx.fill();
-             ctx.restore();
-          }
+           // Telegraph Effects during Windup
+           if (god.attackState === "WINDUP" && god.telegraphs) {
+              for (const tel of god.telegraphs) {
+                 if (tel.isShield) {
+                    // Draw massive circular warning for shock shield
+                    ctx.save();
+                    const isWarningPulse = Math.floor(now / 50) % 2 === 0;
+                    ctx.fillStyle = `rgba(255, 0, 0, ${isWarningPulse ? 0.3 : 0.1})`;
+                    ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    ctx.arc(tel.x, tel.y, tel.radius, 0, Math.PI*2);
+                    ctx.fill(); ctx.stroke();
+                    ctx.restore();
+                 } else {
+                    ctx.save();
+                    ctx.translate(tel.x, tel.y);
+                    ctx.rotate(tel.angle);
+                    const isWarningPulse = Math.floor(now / 50) % 2 === 0;
+                    ctx.fillStyle = tel.isHeavy ? `rgba(255, 0, 0, ${isWarningPulse ? 0.3 : 0.1})` : `rgba(255, 100, 100, 0.2)`;
+                    
+                    // Diamond shape indicator matches exactly the hitbox
+                    ctx.beginPath();
+                    ctx.moveTo(-tel.length/2, 0);
+                    ctx.lineTo(0, -(tel.width/2));
+                    ctx.lineTo(tel.length/2, 0);
+                    ctx.lineTo(0, (tel.width/2));
+                    ctx.fill();
+                    
+                    ctx.strokeStyle = "rgba(255, 50, 50, 0.8)";
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                    ctx.restore();
+                 }
+              }
+           }
+          // Slash / Shield Effects
+           for (const sl of god.slashEffects) {
+              const activeRatio = sl.lifeMs / sl.maxLifeMs;
+              const expRatio = 1.0 - activeRatio; // 0.0 to 1.0
+              
+              if (sl.isShieldRun) {
+                 // Expanding Propelled Shock Shield
+                 ctx.save();
+                 const currentRadius = sl.maxRadius * expRatio;
+                 ctx.strokeStyle = `rgba(255, 50, 100, ${activeRatio})`;
+                 ctx.lineWidth = 40 * activeRatio;
+                 ctx.shadowColor = "#FF3366";
+                 ctx.shadowBlur = 30;
+                 ctx.beginPath();
+                 ctx.arc(sl.x, sl.y, currentRadius, 0, Math.PI*2);
+                 ctx.stroke();
+                 
+                 // Core inner electric string
+                 ctx.strokeStyle = `rgba(255, 255, 255, ${activeRatio})`;
+                 ctx.lineWidth = 10 * activeRatio;
+                 ctx.setLineDash([20, 40]);
+                 ctx.stroke();
+                 
+                 ctx.restore();
+              } else {
+                 // Standard Diamond Sweep
+                 ctx.save();
+                 ctx.translate(sl.x, sl.y);
+                 ctx.rotate(sl.angle);
+                 
+                 ctx.fillStyle = sl.isHeavy ? `rgba(255, 0, 50, ${activeRatio})` : `rgba(255, 255, 255, ${activeRatio})`;
+                 ctx.shadowColor = sl.isHeavy ? "red" : "white";
+                 ctx.shadowBlur = 20 * activeRatio;
+                 
+                 // Draw diamond sweep slash
+                 ctx.beginPath();
+                 ctx.moveTo(-sl.length/2, 0);
+                 ctx.lineTo(0, -(sl.width/2) * activeRatio);
+                 ctx.lineTo(sl.length/2, 0);
+                 ctx.lineTo(0, (sl.width/2) * activeRatio);
+                 ctx.fill();
+                 ctx.restore();
+              }
+           }
           
           // Orb Collectible
           if (god.collectibleOrb) {
@@ -3361,7 +3432,7 @@ export default function Game({
           ctx.font = "bold 24px monospace";
           ctx.textAlign = "center";
           ctx.shadowColor = "red"; ctx.shadowBlur = 10;
-          ctx.fillText("THE ASCENDED BLADE", w / 2, 40);
+          ctx.fillText("THE SHOCK EMPRESS", w / 2, 40);
           ctx.shadowBlur = 0;
 
           // Boss HP Bar

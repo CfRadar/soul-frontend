@@ -5,6 +5,7 @@ import { setSocketToken, connectSocketIfTokenExists, socket } from "./socket";
 import FriendsPanel from "./FriendsPanel";
 import LeaderboardPanel from "./LeaderboardPanel";
 import NotificationsModal from "./NotificationsModal";
+import GuidePanel from "./GuidePanel";
 import CursorTrail from "./components/CursorTrail";
 import MenuBackground from "./components/MenuBackground";
 import RankBadge from "./ui/RankBadge";
@@ -62,6 +63,7 @@ export default function App() {
   const [mode, setMode] = useState("ranked"); // ranked | friend | timeTrial | boss
   const [selectedBossId, setSelectedBossId] = useState(null);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // Change username modal state
   const [showUsernameModal, setShowUsernameModal] = useState(false);
@@ -304,6 +306,14 @@ export default function App() {
           {/* Right: Notification bell + Logout (only when logged in) */}
           {me && (
             <div className="flex items-center gap-3">
+              {/* Guide button */}
+              <button
+                onClick={() => setGuideOpen(true)}
+                className="font-mono text-xs border border-white/60 px-3 py-2 rounded-lg hover:bg-white hover:text-black transition flex items-center gap-2"
+              >
+                <span>GUIDE</span>
+              </button>
+
               {/* Bell icon button */}
               <button
                 onClick={() => setNotifOpen(true)}
@@ -560,6 +570,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Guide Panel Modal */}
+      <GuidePanel open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   );
 }

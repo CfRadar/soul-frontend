@@ -1994,6 +1994,17 @@ export default function Game({
           lr.active = false;
           lr.finished = true;
           lr.lasers = [];
+
+          // FULL HEAL AFTER LASER ROUND
+          setHp((old) => {
+            const amountToHeal = maxHpRef.current - old;
+            if (amountToHeal > 0) playHealSound(amountToHeal);
+            return maxHpRef.current;
+          });
+          healTextRef.current = { text: "FULL HP RESTORED", until: Date.now() + 3000 };
+          setHpPulse(true);
+          setTimeout(() => setHpPulse(false), 500);
+
         } else {
           // Generate Lasers
           if (lrElapsedMs >= lr.nextWaveAtMs) {

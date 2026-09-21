@@ -4,7 +4,89 @@
 
 html, body, #root {
   height: 100%;
+  background-color: #000000;
+  color: #ffffff;
+  font-family: 'VT323', monospace;
+  letter-spacing: 0.05em;
 }
+
+.font-pixel {
+  font-family: 'Press Start 2P', monospace;
+  line-height: 1.5;
+}
+
+.font-dialogue {
+  font-family: 'VT323', monospace;
+}
+
+/* Undertale Battle Boxes */
+.undertale-box {
+  background-color: #000000;
+  border: 4px solid #ffffff;
+  box-shadow: 0 0 0 2px #000000, 0 0 0 4px #ffffff;
+}
+
+.undertale-box-thin {
+  background-color: #000000;
+  border: 2px solid #ffffff;
+}
+
+.undertale-box-orange {
+  background-color: #000000;
+  border: 3px solid #ff9900;
+  box-shadow: 0 0 0 2px #000000, 0 0 0 3px #ff9900;
+}
+
+.undertale-box-cyan {
+  background-color: #000000;
+  border: 3px solid #00ffff;
+  box-shadow: 0 0 0 2px #000000, 0 0 0 3px #00ffff;
+}
+
+.undertale-box-yellow {
+  background-color: #000000;
+  border: 3px solid #ffff00;
+  box-shadow: 0 0 0 2px #000000, 0 0 0 3px #ffff00;
+}
+
+.undertale-box-green {
+  background-color: #000000;
+  border: 3px solid #00ff00;
+  box-shadow: 0 0 0 2px #000000, 0 0 0 3px #00ff00;
+}
+
+.undertale-box-purple {
+  background-color: #000000;
+  border: 3px solid #e0aaff;
+  box-shadow: 0 0 0 2px #000000, 0 0 0 3px #e0aaff;
+}
+
+/* Retro Pixel Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #000000;
+  border-left: 1px solid #333333;
+}
+::-webkit-scrollbar-thumb {
+  background: #ffffff;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ffff00;
+}
+
+/* Soul Heart Pulse */
+@keyframes heartBeat {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+
+.animate-heartbeat {
+  animation: heartBeat 0.8s ease-in-out infinite;
+}
+
 
 /* Undertale-style animations */
 @keyframes float {

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { RANKS } from "./ui/ranks";// Helper components for the visual cards
+import { RANKS } from "../ui/ranks";// Helper components for the visual cards
 const Card = ({ children, title, className = "" }) => (
   <div className={`border border-white/40 bg-black/50 p-4 rounded-xl ${className}`}>
     {title && <div className="text-xs font-bold tracking-widest text-white/70 mb-3 border-b border-white/20 pb-2">{title}</div>}

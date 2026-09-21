@@ -16,9 +16,23 @@ function rankLabel(rank) {
   return map[rank] || String(rank || "").toUpperCase();
 }
 
+// Client-side fallback to guarantee accurate time-trial tier determination
+function getTimeTrialTier(bestMs, position) {
+  const ms = Math.max(0, Number(bestMs) || 0);
+  const pos = Number(position) || 0;
+  if (pos === 1 && ms >= 60000) return { rank: "grandmaster", title: "APEX SURVIVOR" };
+  if (pos > 1 && pos <= 3 && ms >= 60000) return { rank: "master", title: "ELITE DODGER" };
+  if (ms >= 180000) return { rank: "legendary", title: "DETERMINED" };
+  if (ms >= 120000) return { rank: "diamond", title: "BULLET MASTER" };
+  if (ms >= 90000) return { rank: "platinum", title: "SURVIVOR" };
+  if (ms >= 60000) return { rank: "gold", title: "ENDURER" };
+  if (ms >= 30000) return { rank: "silver", title: "TRAINEE" };
+  return { rank: "bronze", title: "NOVICE" };
+}
+
 // Defensive helper: strip email prefix from username if it accidentally contains @
 function safeUsername(username) {
-  if (!username) return "Player";
+  if (!username) return "Human";
   if (username.includes("@")) {
     return username.split("@")[0];
   }
@@ -26,9 +40,9 @@ function safeUsername(username) {
 }
 
 function getWinrate(wins, losses) {
-  const total = wins + losses;
+  const total = (wins || 0) + (losses || 0);
   if (total === 0) return "0%";
-  return Math.round((wins / total) * 100) + "%";
+  return Math.round(((wins || 0) / total) * 100) + "%";
 }
 
 function fmtMs(ms) {
@@ -44,16 +58,15 @@ function RankIcon({ rank }) {
 }
 
 export default function LeaderboardPanel({ me }) {
-  const [tab, setTab] = useState("ranked"); // "ranked" | "timeTrial"
+  const [tab, setTab] = useState("timeTrial"); // Default to timeTrial
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   async function fetchRanked() {
     try {
-      const data = await getLeaderboard(10);
+      const data = await getLeaderboard(20);
       if (data?.ok) {
-        // Use leaderboard array (new response format) or fallback to players
         setPlayers(data.leaderboard || data.players || []);
         setError(null);
       } else {
@@ -101,101 +114,110 @@ export default function LeaderboardPanel({ me }) {
     return () => clearInterval(interval);
   }, [tab]);
 
-  // Calculate current user's rank if they're in the list
   const myUid = me?.uid;
 
   return (
-    <div className="w-full md:w-80 flex-shrink-0">
-      <div className="border border-white/60 rounded-2xl p-4 bg-black/50">
-        {/* Title + Tabs */}
-        <div className="flex items-center justify-between border-b border-white/30 pb-2 mb-3">
-          <div className="text-sm font-mono tracking-widest">LEADERBOARD</div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setTab("ranked")}
-              className={`text-xs font-mono px-2 py-1 rounded transition ${
-                tab === "ranked"
-                  ? "bg-white/20 text-white"
-                  : "text-white/60 hover:text-white/80"
-              }`}
-            >
-              RANKED
-            </button>
-            <button
-              onClick={() => setTab("timeTrial")}
-              className={`text-xs font-mono px-2 py-1 rounded transition ${
-                tab === "timeTrial"
-                  ? "bg-white/20 text-white"
-                  : "text-white/60 hover:text-white/80"
-              }`}
-            >
-              TIME TRIAL
-            </button>
-          </div>
+    <div className="w-full h-full undertale-box p-3 md:p-4 bg-black text-white flex flex-col min-h-0">
+      {/* Title + Tabs Header */}
+      <div className="flex flex-col gap-2.5 border-b-2 border-white pb-3 flex-shrink-0">
+        <div className="flex items-center justify-between">
+          <span className="font-pixel text-xs tracking-wider text-white">
+            * LEADERBOARD
+          </span>
+          <span className="font-pixel text-[9px] text-[#ffff00]">
+            {tab === "timeTrial" ? "SURVIVORS" : "DUELISTS"}
+          </span>
         </div>
 
+        <div className="grid grid-cols-2 gap-2 font-pixel text-[10px]">
+          <button
+            onClick={() => setTab("ranked")}
+            className={`py-2 px-1 border-2 transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              tab === "ranked"
+                ? "border-[#ff9900] text-[#ff9900] bg-white/5"
+                : "border-neutral-700 text-neutral-400 hover:border-white hover:text-white"
+            }`}
+          >
+            {tab === "ranked" && <span className="text-[#ff0000] text-xs animate-heartbeat">❤️</span>}
+            [ RANKED ]
+          </button>
+          <button
+            onClick={() => setTab("timeTrial")}
+            className={`py-2 px-1 border-2 transition flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+              tab === "timeTrial"
+                ? "border-[#00ffff] text-[#00ffff] bg-white/5"
+                : "border-neutral-700 text-neutral-400 hover:border-white hover:text-white"
+            }`}
+          >
+            {tab === "timeTrial" && <span className="text-[#ff0000] text-xs animate-heartbeat">❤️</span>}
+            [ TIME TRIAL ]
+          </button>
+        </div>
+      </div>
+
+      {/* Middle Scrollable Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2 my-2.5">
         {/* Loading State */}
         {loading && (
-          <div className="py-8 text-center text-xs opacity-60 font-mono">
-            Loading...
+          <div className="py-12 text-center text-base opacity-60 font-dialogue">
+            * Reading souls from the barrier...
           </div>
         )}
 
         {/* Error State */}
         {error && !loading && (
-          <div className="py-4 text-center text-xs text-red-400 font-mono">
-            {error}
+          <div className="py-6 text-center text-xs text-red-500 font-pixel">
+            * {error}
           </div>
         )}
 
-        {/* List State */}
+        {/* Empty State */}
         {!loading && !error && players.length === 0 && (
-          <div className="py-8 text-center text-xs opacity-60 font-mono">
-            No players yet
+          <div className="py-12 text-center text-base opacity-60 font-dialogue">
+            * But nobody came.
           </div>
         )}
 
-        {/* Ranked Tab */}
+        {/* Ranked Tab List */}
         {!loading && !error && players.length > 0 && tab === "ranked" && (
           <div className="space-y-2">
             {players.map((player, index) => {
               const isMe = player.uid === myUid;
+              const pos = index + 1;
+              const posColor =
+                pos === 1
+                  ? "text-[#ffff00] font-bold"
+                  : pos === 2
+                  ? "text-neutral-300 font-bold"
+                  : pos === 3
+                  ? "text-amber-500 font-bold"
+                  : "text-neutral-400";
+
               return (
                 <div
                   key={player.uid}
-                  className={
-                    "border rounded-xl px-3 py-2 flex items-center gap-2 font-mono text-xs " +
-                    (isMe
-                      ? "border-white bg-white/10"
-                      : "border-white/30 hover:border-white/50")
-                  }
+                  className={`border-2 p-2 flex items-center gap-2 text-xs transition ${
+                    isMe
+                      ? "border-[#ffff00] bg-white/10"
+                      : "border-white/30 hover:border-white"
+                  }`}
                 >
-                  {/* Rank Number */}
-                  <div className="w-6 text-center opacity-70">
-                    {index + 1}
+                  <div className={`w-6 font-pixel text-[10px] text-center ${posColor} flex-shrink-0`}>
+                    #{pos}
                   </div>
 
-                  {/* Rank Icon */}
                   <RankIcon rank={player.rank} />
 
-                  {/* Username */}
-                  <div className="flex-1 truncate opacity-90">
+                  <div className="flex-1 truncate font-pixel text-[10px] text-white">
                     {safeUsername(player.username)}
                   </div>
 
-                  {/* Winrate */}
-                  <div className="text-[10px] opacity-50">
+                  <div className="text-[12px] font-dialogue text-neutral-400 flex-shrink-0">
                     {getWinrate(player.wins, player.losses)}
                   </div>
 
-                  {/* Rating */}
-                  <div className="text-right">
-                    <div className="opacity-70">{player.rating}</div>
-                  </div>
-
-                  {/* Tier Label */}
-                  <div className="text-[9px] opacity-50 w-14 text-right">
-                    {rankLabel(player.rank)}
+                  <div className="text-right font-pixel text-[10px] text-neutral-300 flex-shrink-0">
+                    {player.rating} EXP
                   </div>
                 </div>
               );
@@ -203,51 +225,66 @@ export default function LeaderboardPanel({ me }) {
           </div>
         )}
 
-        {/* Time Trial Tab */}
+        {/* Time Trial Tab List */}
         {!loading && !error && players.length > 0 && tab === "timeTrial" && (
           <div className="space-y-2">
             {players.map((player, index) => {
               const isMe = player.uid === myUid;
+              const pos = index + 1;
               const timeStr = fmtMs(player.bestTimeTrialMs);
+
+              // Calculate tier accurately client-side
+              const calculatedTier = getTimeTrialTier(player.bestTimeTrialMs, pos);
+              const rankKey =
+                player.timeTrialRank && player.timeTrialRank !== "bronze"
+                  ? player.timeTrialRank
+                  : calculatedTier.rank;
+              const title = player.timeTrialTitle || calculatedTier.title;
+
+              const posColor =
+                pos === 1
+                  ? "text-[#ffff00] font-bold"
+                  : pos === 2
+                  ? "text-neutral-300 font-bold"
+                  : pos === 3
+                  ? "text-amber-500 font-bold"
+                  : "text-neutral-400";
+
               return (
                 <div
                   key={player.uid}
-                  className={
-                    "border rounded-xl px-3 py-2 flex items-center gap-2 font-mono text-xs " +
-                    (isMe
-                      ? "border-white bg-white/10"
-                      : "border-white/30 hover:border-white/50")
-                  }
+                  className={`border-2 p-2.5 flex items-center gap-2.5 transition ${
+                    isMe
+                      ? "border-[#00ffff] bg-white/10"
+                      : "border-white/40 hover:border-white"
+                  }`}
                 >
-                  {/* Rank Number */}
-                  <div className="w-6 text-center opacity-70">
-                    {index + 1}
+                  <div className={`w-6 font-pixel text-[10px] text-center ${posColor} flex-shrink-0`}>
+                    #{pos}
                   </div>
 
-                  {/* Rank Icon */}
-                  <RankIcon rank={player.rank} />
+                  <RankIcon rank={rankKey} />
 
-                  {/* Username */}
-                  <div className="flex-1 truncate opacity-90">
-                    {safeUsername(player.username)}
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate font-pixel text-[11px] text-white">
+                      {safeUsername(player.username)}
+                    </div>
+                    <div className="font-pixel text-[8px] text-neutral-400 tracking-wider">
+                      {title}
+                    </div>
                   </div>
 
-                  {/* Best Time */}
-                  <div className="text-right">
-                    <div className="opacity-90 font-semibold">{timeStr}</div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-pixel text-xs text-[#00ff00]">
+                      {timeStr}
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-
-        {/* Footer */}
-        <div className="mt-3 pt-2 border-t border-white/20 text-[10px] opacity-50 text-center font-mono">
-          Updates every 5s
-        </div>
       </div>
     </div>
   );
 }
-

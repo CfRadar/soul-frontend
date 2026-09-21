@@ -61,7 +61,7 @@ export default function RankBadge({ rank, rating, size = "md", animated = false 
 
   return (
     <div
-      className={`inline-flex items-center gap-2 px-3 py-1 border border-white/30 rounded-lg bg-black/50 relative overflow-hidden ${
+      className={`inline-flex items-center gap-2.5 px-3 py-1.5 border-2 border-white bg-black relative overflow-hidden ${
         animated ? "animate-float" : ""
       }`}
     >
@@ -71,9 +71,9 @@ export default function RankBadge({ rank, rating, size = "md", animated = false 
       <div className="flex-shrink-0 relative z-10 w-7 h-7">
         <RankIcon size={size === "sm" ? 20 : size === "lg" ? 32 : 28} />
       </div>
-      <div className={`font-mono relative z-10 ${sizeClasses[size] || sizeClasses.md}`}>
-        <div className="text-white/90">{rankData.label}</div>
-        <div className="text-white/70">{rating}</div>
+      <div className={`font-pixel relative z-10 ${sizeClasses[size] || sizeClasses.md}`}>
+        <div className="text-white text-[10px] tracking-wider">{rankData.label}</div>
+        <div className="text-[#ffff00] text-[11px] mt-0.5">{rating} EXP</div>
       </div>
     </div>
   );

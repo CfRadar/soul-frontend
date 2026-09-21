@@ -140,6 +140,39 @@ function getOpponentName(me, matchInfo) {
   return safeUsername(p2?.username || p1?.username) || "OPPONENT";
 }
 
+function getTimeTrialRankClient(ms) {
+  const time = Math.max(0, Number(ms) || 0);
+  if (time >= 180000) return "legendary";
+  if (time >= 120000) return "diamond";
+  if (time >= 90000) return "platinum";
+  if (time >= 60000) return "gold";
+  if (time >= 30000) return "silver";
+  return "bronze";
+}
+
+function getTimeTrialTitleClient(ms) {
+  const rank = getTimeTrialRankClient(ms);
+  const titles = {
+    legendary: "IMMORTAL SURVIVOR",
+    diamond: "DIAMOND SURVIVOR",
+    platinum: "ELITE SURVIVOR",
+    gold: "VETERAN SURVIVOR",
+    silver: "ADEPT SURVIVOR",
+    bronze: "INITIATE SURVIVOR",
+  };
+  return titles[rank] || "SURVIVOR";
+}
+
+function getNextTierGoal(ms) {
+  const time = Math.max(0, Number(ms) || 0);
+  if (time < 30000) return `Adept in ${Math.ceil((30000 - time) / 1000)}s`;
+  if (time < 60000) return `Veteran in ${Math.ceil((60000 - time) / 1000)}s`;
+  if (time < 90000) return `Elite in ${Math.ceil((90000 - time) / 1000)}s`;
+  if (time < 120000) return `Diamond in ${Math.ceil((120000 - time) / 1000)}s`;
+  if (time < 180000) return `Immortal in ${Math.ceil((180000 - time) / 1000)}s`;
+  return "MAX TIER 👑";
+}
+
 // ========== HeaderBar Component (Internal) ==========
 // Clean top HUD bar above canvas - shown during COUNTDOWN + PLAYING
 function HeaderBar({
@@ -158,51 +191,64 @@ function HeaderBar({
   const showEnemyHp = isCompetitive || isStandaloneSans;
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-black border-b border-white/20 min-h-[48px]">
-      {/* Left: Names - w-[30%] min-w-0 */}
-      <div className="w-[30%] min-w-0 flex items-center">
-        <span className="font-mono text-sm text-white truncate">
+    <div className="flex items-center justify-between px-4 py-2 border-b-4 border-white bg-black min-h-[56px] font-pixel">
+      {/* Left: Names */}
+      <div className="w-[30%] min-w-0 flex items-center gap-2">
+        <span className="text-[#ff0000] text-xs animate-heartbeat">❤️</span>
+        <span className="text-xs text-white truncate uppercase tracking-wide">
           {myName}
         </span>
-        <span className="mx-2 text-white/50 text-xs">VS</span>
-        <span className="font-mono text-sm text-white truncate">
+        <span className="mx-1 text-neutral-500 text-xs">VS</span>
+        <span className="text-xs text-neutral-400 truncate uppercase tracking-wide">
           {oppName}
         </span>
       </div>
 
-      {/* Center: Timer - w-[32%] flex justify-center */}
+      {/* Center: Timer */}
       <div className="w-[32%] flex justify-center">
-        <span className={`font-mono text-3xl text-white tabular-nums ${phase === PHASE.PLAYING ? 'animate-pulse' : ''}`}>
+        <span className={`text-2xl text-white tabular-nums tracking-widest ${phase === PHASE.PLAYING ? 'text-[#ffff00]' : 'text-white'}`}>
           {timerText}
         </span>
       </div>
 
-      {/* Right: HP */}
-      <div className="w-[38%] flex justify-end items-center gap-6">
-        {/* Opponent HP Display (Competitive) */}
+      {/* Right: HP Bars */}
+      <div className="w-[38%] flex justify-end items-center gap-4">
+        {/* Opponent HP (Competitive) */}
         {showEnemyHp && oppName && (
-          <div className="flex flex-col items-end opacity-80">
-            <div className="text-[10px] text-white/50 mb-[-4px]">{isStandaloneSans ? 'BOSS HP' : 'OPP HP'}</div>
-            <div className={`font-mono text-2xl tabular-nums transition-all duration-150 ${enemyHitFlash ? 'text-red-400 scale-110' : enemyHealFlash ? 'text-lime-300 scale-110' : 'text-gray-300'}`}>
-              {enemyHpPulse ? '...' : enemyHp}
+          <div className="flex flex-col items-end gap-1">
+            <div className="text-[9px] text-neutral-400 tracking-widest">{isStandaloneSans ? '* BOSS HP' : '* OPP HP'}</div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-20 h-3 bg-[#880000] border border-white/60 overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 ${enemyHitFlash ? 'bg-red-400' : enemyHealFlash ? 'bg-[#00ff00]' : 'bg-[#ff9900]'}`}
+                  style={{ width: `${Math.max(0, Math.min(100, enemyHp))}%` }}
+                />
+              </div>
+              <span className={`text-xs tabular-nums transition-all duration-150 ${enemyHitFlash ? 'text-red-400' : enemyHealFlash ? 'text-[#00ff00]' : 'text-neutral-300'}`}>
+                {enemyHpPulse ? '???' : enemyHp}
+              </span>
             </div>
           </div>
         )}
 
-        {/* My HP Display */}
-        <div className="flex items-center gap-2 border-l border-white/20 pl-4">
-          <div className="flex flex-col items-center relative">
-            {isCorruptActive && (
-              <div className="text-[10px] font-bold text-purple-400 font-mono bg-purple-900/40 px-1 rounded animate-pulse absolute -top-4">
-                REV: {corruptHealRem.toFixed(1)}s
-              </div>
-            )}
-            <div className="flex items-center">
-              <span className={`font-mono text-3xl tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
-                {hp}
-              </span>
-              <span className="ml-1 text-xs text-white/50 font-mono">HP</span>
+        {/* My HP Bar */}
+        <div className="flex flex-col items-end gap-1 border-l-2 border-white/20 pl-4">
+          {isCorruptActive && (
+            <div className="text-[9px] text-[#ff00ff] animate-pulse tracking-wider">
+              REV: {corruptHealRem.toFixed(1)}s
             </div>
+          )}
+          <div className="text-[9px] text-neutral-400 tracking-widest">* MY HP</div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-24 h-3 bg-[#880000] border border-white/60 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${hpHitPulse ? 'bg-red-400' : 'bg-[#ffff00]'}`}
+                style={{ width: `${Math.max(0, Math.min(100, hp))}%` }}
+              />
+            </div>
+            <span className={`text-xs tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
+              {hp}
+            </span>
           </div>
         </div>
       </div>
@@ -217,6 +263,7 @@ export default function Game({
   bossId = null,
   friendTargetUid = null,
   onExit,
+  onBack,
   onMeUpdate,
 }) {
   const canvasRef = useRef(null);
@@ -1185,15 +1232,23 @@ export default function Game({
     return () => clearInterval(t);
   }, [phase, startAt]);
 
-  // --- Time Trial: submit score when entering SUMMARY phase ---
+  // --- Time Trial: submit score once when entering SUMMARY phase ---
+  const timeTrialSubmittedRef = useRef(false);
+
   useEffect(() => {
-    if (mode !== "timeTrial" || phase !== PHASE.SUMMARY) return;
+    if (mode !== "timeTrial" || phase !== PHASE.SUMMARY) {
+      timeTrialSubmittedRef.current = false;
+      return;
+    }
+
+    if (timeTrialSubmittedRef.current) return;
+    timeTrialSubmittedRef.current = true;
 
     // Calculate survival time using frozen endAt timestamp
     const s = surviveStart;
     if (s <= 0) return;
 
-    const finalTime = endAt ?? nowMs; // Use frozen endAt if available
+    const finalTime = endAt ?? Date.now();
     let survivalMs = finalTime - s;
     const radState = radianceBossRef.current;
     if (radState.triggered) {
@@ -1207,7 +1262,7 @@ export default function Game({
     if (survivalMs > 0) {
       submitTimeTrialScore(survivalMs);
     }
-  }, [mode, phase, surviveStart, endAt, nowMs]);
+  }, [mode, phase, surviveStart, endAt]);
 
   function resetGameState() {
     setHp(100);
@@ -1337,11 +1392,18 @@ export default function Game({
     const rid = roomIdRef.current;
     lastResultRef.current = null;
 
+    ensureRadianceMusicStoppedImmediately();
+    ensureGoddessMusicStoppedImmediately();
+
     if (mode === "ranked" && phaseRef.current === PHASE.PLAYING && rid) {
       socket.emit("game:forfeit", { roomId: rid });
     }
 
     cancelAnimationFrame(rafRef.current);
+    if (window.bgTicker) {
+      clearInterval(window.bgTicker);
+      window.bgTicker = null;
+    }
 
     try {
       if (phaseRef.current === PHASE.QUEUE && mode !== "timeTrial") {
@@ -1349,7 +1411,8 @@ export default function Game({
       }
     } catch { }
 
-    onExit?.();
+    if (onExit) onExit();
+    else if (onBack) onBack();
   }
 
   function joinQueue() {
@@ -1374,24 +1437,31 @@ export default function Game({
   async function submitTimeTrialScore(timeMs) {
     try {
       setTimeTrialSubmissionStatus("submitting");
-      setTimeTrialSubmissionMsg("Submitting...");
+      setTimeTrialSubmissionMsg("Recording survival record...");
 
       const result = await submitTimeTrial(timeMs);
 
       if (result?.ok) {
         setBestTimeTrialMs(result.bestTimeTrialMs);
         setTimeTrialImproved(result.improved);
+        setTimeTrialSubmissionStatus("success");
+        const rankTitle = result.timeTrialTitle || getTimeTrialTitleClient(timeMs);
 
         if (result.improved) {
-          setTimeTrialSubmissionStatus("success");
-          setTimeTrialSubmissionMsg("New Personal Best! 🎉");
+          setTimeTrialSubmissionMsg(`New Personal Best! 🎉 ${rankTitle}`);
         } else {
-          setTimeTrialSubmissionStatus("success");
-          setTimeTrialSubmissionMsg("Time submitted");
+          setTimeTrialSubmissionMsg(`Rank: ${rankTitle}`);
+        }
+
+        if (onMeUpdate) {
+          onMeUpdate({
+            bestTimeTrialMs: result.bestTimeTrialMs,
+            timeTrialRank: result.timeTrialRank,
+          });
         }
       } else {
         setTimeTrialSubmissionStatus("error");
-        setTimeTrialSubmissionMsg(result?.error || "Could not submit time (offline?)");
+        setTimeTrialSubmissionMsg(result?.error || "Could not submit time");
       }
     } catch (e) {
       setTimeTrialSubmissionStatus("error");
@@ -1524,14 +1594,14 @@ export default function Game({
 
       if (attackType === 0) {
         const isHoriz = rand() > 0.5;
-        const gapSize = 140;
-        const gapStart = 40 + rand() * (isHoriz ? h - 220 : w - 220);
-        const speed = 250;
+        const gapSize = 85; // tighter gap for increased challenge
+        const gapStart = 30 + rand() * (isHoriz ? h - 160 : w - 160);
+        const speed = 360; // faster bone wall
         const fromLeftOrTop = rand() > 0.5;
 
-        const count = isHoriz ? h / 35 : w / 35;
+        const count = isHoriz ? h / 30 : w / 30;
         for (let i = 0; i <= count; i++) {
-          const pos = i * 35;
+          const pos = i * 30;
           if (pos > gapStart && pos < gapStart + gapSize) continue;
           boss.projectiles.push({
             type: 'bone',
@@ -1543,44 +1613,54 @@ export default function Game({
           });
         }
       } else if (attackType === 1) {
-        const isHoriz = rand() > 0.5;
+        // Twin Gaster Blaster lasers - horizontal and vertical centered on player
         boss.lasers.push({
-          x: isHoriz ? w / 2 : p.x,
-          y: isHoriz ? p.y : h / 2,
-          isHoriz,
-          chargeTime: 0.8,
-          activeTime: 0.3,
+          x: w / 2,
+          y: p.y,
+          isHoriz: true,
+          chargeTime: 0.55,
+          activeTime: 0.35,
           elapsed: 0,
           spawnedAtMs: elapsedMs,
-          thick: 90,
+          thick: 80,
+        });
+        boss.lasers.push({
+          x: p.x,
+          y: h / 2,
+          isHoriz: false,
+          chargeTime: 0.55,
+          activeTime: 0.35,
+          elapsed: 0,
+          spawnedAtMs: elapsedMs,
+          thick: 80,
         });
         playLaserChargeSound();
       } else if (attackType === 2) {
         const cx = w / 2;
         const cy = h / 2;
-        const numBullets = 18;
+        const numBullets = 24;
         const angleOffset = rand() * Math.PI * 2;
         for (let i = 0; i < numBullets; i++) {
           boss.projectiles.push({
             type: 'ring',
             cx, cy,
             angle: angleOffset + (i / numBullets) * Math.PI * 2,
-            radius: 500,
-            r: 8,
-            speed: 1.2,
-            contractSpeed: 100
+            radius: 520,
+            r: 9,
+            speed: 2.2,
+            contractSpeed: 160,
           });
         }
       } else if (attackType === 3) {
-        const shiftX = (rand() - 0.5) * 100;
-        const shiftY = (rand() - 0.5) * 100;
-        boss.lasers.push({ x: p.x + shiftX, y: h / 2, isHoriz: false, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, spawnedAtMs: elapsedMs, thick: 60 });
-        boss.lasers.push({ x: w / 2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.9, activeTime: 0.4, elapsed: 0, spawnedAtMs: elapsedMs, thick: 60 });
+        const shiftX = (rand() - 0.5) * 80;
+        const shiftY = (rand() - 0.5) * 80;
+        boss.lasers.push({ x: p.x + shiftX, y: h / 2, isHoriz: false, chargeTime: 0.55, activeTime: 0.35, elapsed: 0, spawnedAtMs: elapsedMs, thick: 80 });
+        boss.lasers.push({ x: w / 2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.55, activeTime: 0.35, elapsed: 0, spawnedAtMs: elapsedMs, thick: 80 });
         playLaserChargeSound();
       }
 
-      boss.nextAttackMs = Math.max(elapsedMs + 2200, elapsedMs + 1000 + rand() * 1200);
-      if (attackType === 3 || attackType === 1) boss.nextAttackMs -= 400;
+      boss.nextAttackMs = Math.max(elapsedMs + 1300, elapsedMs + 800 + rand() * 700);
+      if (attackType === 3 || attackType === 1) boss.nextAttackMs -= 200;
     }
 
     for (let i = boss.projectiles.length - 1; i >= 0; i--) {
@@ -1795,27 +1875,26 @@ export default function Game({
           const attackType = Math.floor(rngRef.current() * 3);
           rad.attackType = attackType;
           if (attackType === 0) {
-            // following orbs
+            // 5 aggressive homing light spheres
             rad.homingOrbs.push({ x: w / 2, y: 100, vx: 0, vy: 0, r: 10 });
-            rad.homingOrbs.push({ x: w / 2 - 50, y: 100, vx: 0, vy: 0, r: 10 });
-            rad.homingOrbs.push({ x: w / 2 + 50, y: 100, vx: 0, vy: 0, r: 10 });
+            rad.homingOrbs.push({ x: w / 2 - 60, y: 100, vx: 0, vy: 0, r: 10 });
+            rad.homingOrbs.push({ x: w / 2 + 60, y: 100, vx: 0, vy: 0, r: 10 });
+            rad.homingOrbs.push({ x: w / 2 - 120, y: 100, vx: 0, vy: 0, r: 10 });
+            rad.homingOrbs.push({ x: w / 2 + 120, y: 100, vx: 0, vy: 0, r: 10 });
           } else if (attackType === 1) {
-            // spikes at walls
-            const isVert = rngRef.current() > 0.5;
-            if (isVert) {
-              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-              rad.wallSpikes.push({ isVert: true, x: 20 + rngRef.current() * (w - 40), y: 0, width: 50, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-            } else {
-              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-              rad.wallSpikes.push({ isVert: false, x: 0, y: 20 + rngRef.current() * (h - 40), width: 50, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-            }
+            // Criss-cross wall spikes (horizontal + vertical simultaneously)
+            rad.wallSpikes.push({ isVert: true, x: 30 + rngRef.current() * (w - 60), y: 0, width: 55, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+            rad.wallSpikes.push({ isVert: true, x: 30 + rngRef.current() * (w - 60), y: 0, width: 55, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+            rad.wallSpikes.push({ isVert: false, x: 0, y: 30 + rngRef.current() * (h - 60), width: 55, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+            rad.wallSpikes.push({ isVert: false, x: 0, y: 30 + rngRef.current() * (h - 60), width: 55, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
           } else if (attackType === 2) {
-            // rotating lasers
-            rad.lasers.push({ cx: w / 2, cy: 120, angle: 0, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0, spawnedAtMs: elapsedMs });
-            rad.lasers.push({ cx: w / 2, cy: 120, angle: Math.PI, rotSpeed: 1.5, length: 800, thick: 40, chargeTime: 1.0, activeTime: 2.0, elapsed: 0, spawnedAtMs: elapsedMs });
+            // Tri-beam sweeping lasers
+            for (let b = 0; b < 3; b++) {
+              rad.lasers.push({ cx: w / 2, cy: 120, angle: (b * Math.PI * 2) / 3, rotSpeed: 1.8, length: 900, thick: 45, chargeTime: 0.75, activeTime: 2.2, elapsed: 0, spawnedAtMs: elapsedMs });
+            }
             playLaserChargeSound();
           }
-          rad.nextAttackAtMs = elapsedMs + 3500 + rngRef.current() * 1500;
+          rad.nextAttackAtMs = elapsedMs + 1800 + rngRef.current() * 900;
         }
 
         // Update attacks
@@ -1824,9 +1903,9 @@ export default function Game({
           const dx = p.x - orb.x;
           const dy = p.y - orb.y;
           const dist = Math.hypot(dx, dy) || 1;
-          const targetSpeed = 100;
-          orb.vx += (dx / dist) * 150 * dt;
-          orb.vy += (dy / dist) * 150 * dt;
+          const targetSpeed = 170;
+          orb.vx += (dx / dist) * 240 * dt;
+          orb.vy += (dy / dist) * 240 * dt;
           const curSpeed = Math.hypot(orb.vx, orb.vy);
           if (curSpeed > targetSpeed) {
             orb.vx = (orb.vx / curSpeed) * targetSpeed;
@@ -1842,13 +1921,13 @@ export default function Game({
           const curElapsed = (elapsedMs - sp.spawnedAtMs) / 1000;
           sp.timer = curElapsed;
           
-          if (sp.state === "WARN" && curElapsed > 1.0) {
+          if (sp.state === "WARN" && curElapsed > 0.65) {
             sp.state = "EXTEND";
           } else if (sp.state === "EXTEND") {
-            sp.length += 800 * dt;
+            sp.length += 1200 * dt;
             if (sp.length >= sp.maxLength) { sp.length = sp.maxLength; sp.state = "RETRACT"; }
           } else if (sp.state === "RETRACT") {
-            sp.length -= 400 * dt;
+            sp.length -= 500 * dt;
             if (sp.length <= 0) rad.wallSpikes.splice(i, 1);
           }
         }
@@ -2482,7 +2561,7 @@ export default function Game({
           const dist = Math.hypot(pr.x - p.x, pr.y - p.y);
           if (dist < p.r + pr.r - 2) {
             tookHit = true;
-            applyDamage(12, pr);
+            applyDamage(16, pr);
             break;
           }
         }
@@ -2498,7 +2577,7 @@ export default function Game({
               : Math.abs(p.x - L.x) < L.thick / 2 + p.r - 2;
             if (hit) {
               tookHit = true;
-              applyDamage(20, null);
+              applyDamage(24, null);
               break;
             }
           }
@@ -2590,7 +2669,7 @@ export default function Game({
         // homing orbs
         for (const orb of rad.homingOrbs) {
           if (Math.hypot(orb.x - p.x, orb.y - p.y) < p.r + orb.r - 2) {
-            tookHit = true; applyDamage(15, orb); break;
+            tookHit = true; applyDamage(18, orb); break;
           }
         }
         // wall spikes
@@ -2598,9 +2677,9 @@ export default function Game({
           for (const sp of rad.wallSpikes) {
             if (sp.state === "EXTEND" || sp.state === "RETRACT") {
               if (sp.isVert) {
-                if (Math.abs(p.x - sp.x) < sp.width / 2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(18, null); break; }
+                if (Math.abs(p.x - sp.x) < sp.width / 2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(22, null); break; }
               } else {
-                if (Math.abs(p.y - sp.y) < sp.width / 2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(18, null); break; }
+                if (Math.abs(p.y - sp.y) < sp.width / 2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(22, null); break; }
               }
             }
           }
@@ -2614,7 +2693,7 @@ export default function Game({
               const distToLine = Math.abs(dx * Math.sin(-L.angle) + dy * Math.cos(-L.angle));
               const forwardDist = dx * Math.cos(L.angle) + dy * Math.sin(L.angle);
               if (distToLine < L.thick / 2 + p.r - 2 && forwardDist > 0 && forwardDist < L.length) {
-                tookHit = true; applyDamage(20, null); break;
+                tookHit = true; applyDamage(25, null); break;
               }
             }
           }
@@ -3836,18 +3915,19 @@ export default function Game({
   // === FATAL ERROR FALLBACK UI ===
   if (fatalErr) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-red-500 mb-4">Error</div>
-          <div className="text-white/80 mb-6">{fatalErr}</div>
+      <div className="w-screen h-screen bg-black text-white flex items-center justify-center p-4">
+        <div className="undertale-box p-8 max-w-md w-full text-center bg-black">
+          <div className="text-2xl text-[#ff0000] animate-heartbeat mb-4">❤️</div>
+          <div className="font-pixel text-sm text-red-500 mb-3">* FATAL ERROR</div>
+          <div className="font-dialogue text-lg text-neutral-300 mb-6">* {fatalErr}</div>
           <button
             onClick={() => {
               setFatalErr("");
               exitToMenu();
             }}
-            className="px-6 py-3 rounded-xl border-2 border-white hover:bg-white/10 font-semibold"
+            className="font-pixel text-xs border-2 border-white hover:bg-white hover:text-black px-5 py-3 transition cursor-pointer"
           >
-            Back to Menu
+            [ BACK TO MENU ]
           </button>
         </div>
       </div>
@@ -3858,26 +3938,10 @@ export default function Game({
   const showHeaderBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
 
   return (
-    <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl">
-        {/* Top info bar - hidden during PLAYING to reduce clutter */}
-        {phase !== PHASE.PLAYING && (
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-sm text-white/80">
-              <span className="font-semibold text-white">
-                Soul Duel {vsMode === "ranked" ? "• Ranked" : vsMode === "friend" ? "• Friend" : "• Solo Time Trial"}
-              </span>{" "}
-              <span className="opacity-70">•</span>{" "}
-              <span className="opacity-80">socket:</span> {socketStatus}
-            </div>
-            <div className="text-xs text-white/60">
-              id: <span className="text-white/80">{myId || "..."}</span>
-            </div>
-          </div>
-        )}
-
-        <div className="relative rounded-2xl border border-white/30 bg-black shadow-xl overflow-hidden">
-          {/* Header Bar - shown during COUNTDOWN and PLAYING */}
+    <div className="w-screen h-screen max-w-full max-h-full bg-black text-white flex flex-col items-center justify-center overflow-hidden select-none p-1.5 sm:p-2.5 font-dialogue">
+      <div className="relative flex flex-col items-center justify-center w-full max-w-[1100px] h-full max-h-screen overflow-hidden gap-2">
+        {/* Top Header during COUNTDOWN & PLAYING */}
+        <div className="w-full flex-shrink-0">
           <HeaderBar
             myName={myName}
             oppName={opponentName}
@@ -3894,128 +3958,105 @@ export default function Game({
             isStandaloneSans={isStandaloneSans}
           />
 
-        {/* Menu Phase: Top HUD */}
-        {phase === PHASE.MENU && (
-           <div className="flex items-center justify-between px-4 py-3 border-b border-white/20">
-             <div className="flex items-center gap-3">
-               <div className="text-sm">
-                 <div className="text-white/60 text-xs">HP</div>
-                 <div className="font-semibold">{hp}</div>
-               </div>
-               <div className="h-8 w-px bg-white/20" />
-               <div className="text-sm">
-                 <div className="text-white/60 text-xs">Survival</div>
-                 <div className="font-semibold">0:00</div>
-               </div>
-             </div>
-             <div className="flex items-center gap-2">
-               <button
-                 onClick={() => {
-                   ensureRadianceMusicStoppedImmediately();
-                   exitToMenu();
-                 }}
-                 className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
-               >
-                 Exit
-               </button>
-             </div>
-           </div>
-        )}
+          {/* Top Info Bar during MENU / QUEUE / SUMMARY */}
+          {phase !== PHASE.PLAYING && phase !== PHASE.COUNTDOWN && (
+            <div className="flex items-center justify-between px-4 py-2 border-b-2 border-white bg-black font-pixel">
+              <div className="flex items-center gap-3">
+                <span className="text-[#ff0000] text-xs animate-heartbeat">❤️</span>
+                <span className="text-xs text-white tracking-wider">
+                  {vsMode === "ranked"
+                    ? "* RANKED BATTLE"
+                    : vsMode === "friend"
+                    ? "* FRIEND DUEL"
+                    : vsMode === "boss"
+                    ? "* BOSS GAUNTLET"
+                    : "* TIME TRIAL SURVIVAL"}
+                </span>
+              </div>
 
-        {/* Non-PLAYING phases: show room info when applicable */}
-        {phase !== PHASE.PLAYING && phase !== PHASE.MENU && (
-           <div className="flex items-center justify-between px-4 py-2 border-b border-white/20 bg-black/40">
-             <div className="text-xs text-white/60">
-               Room: <span className="text-white/80 font-mono">{roomId ? roomId.slice(0, 20) + "…" : "—"}</span>
-             </div>
-             <div className="flex items-center gap-2">
-               <button
-                 onClick={() => {
-                   ensureRadianceMusicStoppedImmediately();
-                   exitToMenu();
-                 }}
-                 className="ml-3 px-3 py-1.5 rounded-lg border border-white/30 hover:bg-white/10 text-xs"
-               >
-                 Exit
-               </button>
-             </div>
-           </div>
-        )}
+              <button
+                onClick={() => {
+                  ensureRadianceMusicStoppedImmediately();
+                  exitToMenu();
+                }}
+                className="text-[10px] border-2 border-[#ffff00] text-[#ffff00] hover:bg-[#ffff00] hover:text-black px-3 py-1 transition cursor-pointer"
+              >
+                [ EXIT ]
+              </button>
+            </div>
+          )}
+        </div>
 
-        {/* Main Game Container */}
-        <div className="relative w-full rounded-2xl border border-white/30 bg-black shadow-xl overflow-hidden">
+        {/* Main Arena Frame — Undertale Battle Box */}
+        <div className="relative flex items-center justify-center w-full flex-1 overflow-hidden undertale-box bg-black">
           <canvas
             ref={canvasRef}
             width={980}
             height={540}
-            className="w-full h-auto block max-w-full"
-            style={{ aspectRatio: '980/540' }}
+            className="w-auto max-w-full block object-contain"
+            style={{
+              aspectRatio: "980 / 540",
+              maxHeight:
+                phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN
+                  ? "calc(100vh - 80px)"
+                  : "calc(100vh - 120px)",
+            }}
           />
 
-          {/* Bottom Left: Cooldown HUD */}
+          {/* Bottom Left: Cooldown HUD — Undertale Style */}
           {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
-            <div className="absolute bottom-6 left-6 flex flex-col gap-2.5 pointer-events-none z-10 w-48">
-              <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${dashRem <= 0 ? 'bg-lime-900/40 border-lime-500/50' : 'bg-black/60 border-white/10'}`}>
-                <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">DASH</span>
-                <span className={`font-mono font-black text-sm ${dashRem <= 0 ? 'text-lime-400 drop-shadow-[0_0_8px_rgba(100,255,100,0.8)]' : 'text-red-400'}`}>
+            <div className="absolute bottom-4 left-4 flex flex-col gap-2 pointer-events-none z-10">
+              <div className={`flex items-center justify-between px-3 py-1.5 border-2 font-pixel text-[10px] transition-colors w-36 ${
+                dashRem <= 0
+                  ? 'border-[#00ff00] text-[#00ff00] bg-black'
+                  : 'border-neutral-700 text-neutral-500 bg-black'
+              }`}>
+                <span className="tracking-widest">DASH</span>
+                <span className={dashRem <= 0 ? 'text-[#00ff00] animate-pulse' : 'text-red-400'}>
                   {dashRem <= 0 ? "READY" : (dashRem / 1000).toFixed(1) + "s"}
                 </span>
               </div>
-              <div className={`flex items-center justify-between px-3 py-2 rounded-lg border backdrop-blur-md transition-colors ${guardStatus === "READY" ? 'bg-cyan-900/40 border-cyan-500/50' : 'bg-black/60 border-white/10'}`}>
-                <span className="text-white/60 font-mono text-[10px] tracking-widest font-bold">GUARD</span>
-                <span className={`font-mono font-black text-sm ${guardStatus === "READY" ? 'text-cyan-400 drop-shadow-[0_0_8px_rgba(0,255,255,0.8)]' : 'text-white/40'}`}>
+              <div className={`flex items-center justify-between px-3 py-1.5 border-2 font-pixel text-[10px] transition-colors w-36 ${
+                guardStatus === "READY"
+                  ? 'border-[#00ffff] text-[#00ffff] bg-black'
+                  : 'border-neutral-700 text-neutral-500 bg-black'
+              }`}>
+                <span className="tracking-widest">GUARD</span>
+                <span className={guardStatus === "READY" ? 'text-[#00ffff] animate-pulse' : 'text-neutral-500'}>
                   {guardStatus}
                 </span>
               </div>
             </div>
           )}
 
-          {/* Bottom Right: Controls Legend */}
-          {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
-            <div className="absolute bottom-6 right-6 flex flex-col items-end gap-2 pointer-events-none z-10 text-right opacity-70">
-              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
-                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">MOVE</span>
-                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">WASD</span>
-              </div>
-              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
-                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">DASH</span>
-                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SHIFT</span>
-              </div>
-              <div className="bg-black/50 backdrop-blur-sm border border-white/10 px-3 py-1.5 rounded-md flex items-center gap-3">
-                <span className="text-[10px] font-mono font-bold text-white/50 tracking-widest drop-shadow-md">GUARD</span>
-                <span className="text-white font-mono font-bold text-sm bg-white/10 px-2 py-0.5 rounded border border-white/20">SPACE</span>
-              </div>
-            </div>
-          )}
-        </div>
-
           {/* MENU Overlay - not shown for time trial */}
           {phase === PHASE.MENU && mode !== "timeTrial" && (
             <Overlay>
-              <div className="text-center">
-                <div className="text-4xl font-extrabold tracking-tight">SOUL DUEL</div>
-                <div className="mt-2 text-white/80">
-                  {vsMode === "ranked"
-                    ? "Ranked matchmaking. Win +10, Lose -20."
-                    : "Friend match. No rank change."}
+              <div className="text-center max-w-md">
+                <div className="text-[#ff0000] text-3xl animate-heartbeat mb-3">❤️</div>
+                <div className="font-pixel text-lg md:text-2xl text-white tracking-widest mb-2">SOUL DUEL</div>
+                <div className="font-dialogue text-xl text-neutral-300 mb-6">
+                  * Prepare your SOUL for battle.
                 </div>
 
-                <button
-                  onClick={joinQueue}
-                  className="mt-6 px-6 py-3 rounded-xl border-2 border-white hover:bg-white/10 font-semibold"
-                >
-                  {vsMode === "ranked" ? "Start Ranked Match" : "Find Friend Match"}
-                </button>
+                <div className="flex flex-col gap-3 items-center">
+                  <button
+                    onClick={joinQueue}
+                    className={`font-pixel text-sm px-6 py-3 border-2 transition cursor-pointer w-full max-w-xs ${
+                      vsMode === "ranked"
+                        ? 'border-[#ff9900] text-[#ff9900] hover:bg-[#ff9900] hover:text-black'
+                        : 'border-[#00ffff] text-[#00ffff] hover:bg-[#00ffff] hover:text-black'
+                    }`}
+                  >
+                    {vsMode === "ranked" ? "[ FIGHT ]" : "[ ACT ]"}
+                  </button>
 
-                <button
-                  onClick={exitToMenu}
-                  className="mt-3 px-6 py-2 rounded-xl border border-white/40 hover:bg-white/10"
-                >
-                  Back to Main Menu
-                </button>
-
-                <div className="mt-2 text-[11px] text-white/50">
-                  Seed: <span className="text-white/80">{seed}</span>
+                  <button
+                    onClick={exitToMenu}
+                    className="font-pixel text-xs border-2 border-white/40 text-neutral-400 hover:border-white hover:text-white px-6 py-2 transition cursor-pointer w-full max-w-xs"
+                  >
+                    [ BACK TO MENU ]
+                  </button>
                 </div>
               </div>
             </Overlay>
@@ -4024,57 +4065,68 @@ export default function Game({
           {/* QUEUE Overlay - not shown for time trial */}
           {phase === PHASE.QUEUE && mode !== "timeTrial" && (
             <Overlay>
-              <div className="text-center">
-                <div className="text-2xl font-bold">Finding match…</div>
-                <div className="mt-2 text-white/80">
-                  {vsMode === "ranked"
-                    ? "Queued for ranked. Waiting for another player."
-                    : "Waiting for a friend invite / pairing."}
+              <div className="text-center max-w-sm">
+                <div className="font-pixel text-sm text-[#ffff00] mb-4 animate-pulse tracking-widest">
+                  SEARCHING...
                 </div>
-
+                <div className="font-dialogue text-xl text-neutral-300 mb-2">
+                  {vsMode === "ranked"
+                    ? "* Scanning the underground for a worthy human soul..."
+                    : "* Waiting for your ally to accept the duel invitation..."}
+                </div>
+                <div className="flex justify-center my-6">
+                  <div className="flex gap-2">
+                    {[0,1,2].map(i => (
+                      <div key={i} className="w-3 h-3 border-2 border-[#ffff00] bg-[#ffff00] animate-pulse" style={{animationDelay: `${i*0.2}s`}} />
+                    ))}
+                  </div>
+                </div>
                 <button
                   onClick={leaveQueue}
-                  className="mt-6 px-5 py-2 rounded-xl border border-white/40 hover:bg-white/10"
+                  className="font-pixel text-xs border-2 border-neutral-600 text-neutral-400 hover:border-white hover:text-white px-5 py-2 transition cursor-pointer"
                 >
-                  Cancel
+                  [ CANCEL ]
                 </button>
               </div>
             </Overlay>
           )}
 
-          {/* MATCH_FOUND Overlay - clean centered layout */}
+          {/* MATCH_FOUND Overlay */}
           {phase === PHASE.MATCH_FOUND && (
             <Overlay>
-              <div className="text-center">
-                <div className="text-[56px] leading-none font-black tracking-[0.12em]">
+              <div className="text-center max-w-lg">
+                <div className="font-pixel text-2xl md:text-4xl text-white tracking-[0.15em] animate-pulse mb-6">
                   MATCH FOUND
                 </div>
 
-                {/* Clean names line - truncate if too long */}
-                <div className="mt-8 text-3xl font-black font-mono tracking-wider text-white max-w-full truncate">
-                  {myName} VS {opponentName}
+                <div className="undertale-box px-6 py-4 mb-6 bg-black">
+                  <div className="flex items-center justify-center gap-4 font-pixel">
+                    <div className="text-left">
+                      <div className="text-[9px] text-neutral-400 tracking-widest mb-1">* YOU</div>
+                      <div className="text-sm text-[#ff9900] truncate max-w-[140px]">{myName}</div>
+                    </div>
+                    <div className="text-neutral-500 font-pixel text-xs">VS</div>
+                    <div className="text-right">
+                      <div className="text-[9px] text-neutral-400 tracking-widest mb-1">* OPPONENT</div>
+                      <div className="text-sm text-[#00ffff] truncate max-w-[140px]">{opponentName}</div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="mt-6 text-white/70 uppercase tracking-widest text-xs">
-                  LOCKING AGENTS • PREPARING ARENA
+                <div className="font-dialogue text-lg text-neutral-400 tracking-widest animate-pulse">
+                  * LOCKING ARENA • PREPARING SOULS...
                 </div>
               </div>
             </Overlay>
           )}
 
-          {/* COUNTDOWN Overlay - center countdown, below show names */}
+          {/* COUNTDOWN Overlay */}
           {phase === PHASE.COUNTDOWN && (
             <Overlay>
               <div className="text-center">
-                <div className="text-2xl font-bold">Match starting</div>
-                <div className="mt-2 text-white/80">Get ready…</div>
-
-                <div className="mt-6 text-6xl font-extrabold tabular-nums">
+                <div className="font-pixel text-sm text-neutral-400 tracking-widest mb-4">* MATCH STARTING</div>
+                <div className="font-pixel text-7xl md:text-8xl text-[#ffff00] tabular-nums drop-shadow-[0_0_20px_rgba(255,255,0,0.5)] animate-pulse">
                   {Math.max(0, Math.ceil(countdownMs / 1000))}
-                </div>
-
-                <div className="mt-3 text-xs text-white/60 uppercase tracking-widest">
-                  Do not alt-tab. Dodge everything.
                 </div>
               </div>
             </Overlay>
@@ -4084,19 +4136,18 @@ export default function Game({
           {phase === PHASE.MATCH_OVER && (
             <Overlay>
               <div className="text-center">
-                <div
-                  className={
-                    "text-5xl font-black tracking-tight " +
-                    (iAmWinner ? "animate-pulse" : "opacity-90")
-                  }
-                >
-                  {iAmWinner ? "MATCH WON" : "MATCH LOST"}
+                <div className={`font-pixel text-2xl md:text-4xl tracking-widest ${
+                  iAmWinner ? 'text-[#ffff00] animate-pulse' : 'text-red-500'
+                }`}>
+                  {iAmWinner ? "VICTORY!" : "GAME OVER"}
                 </div>
-                <div className="mt-3 text-white/80">
-                  {iAmWinner ? "Clean dodges." : "You got clipped."}
+                <div className="mt-4 font-dialogue text-xl text-neutral-300">
+                  {iAmWinner
+                    ? "* Your SOUL shines with DETERMINATION."
+                    : "* You were consumed by the darkness."}
                 </div>
-                <div className="mt-4 text-2xl font-bold font-mono text-white/70">
-                  Time: {timerText}
+                <div className="mt-3 font-pixel text-sm text-neutral-400">
+                  * TIME: {timerText}
                 </div>
               </div>
             </Overlay>
@@ -4105,43 +4156,58 @@ export default function Game({
           {/* SUMMARY Overlay */}
           {phase === PHASE.SUMMARY && (
             <Overlay>
-              <div className="text-center max-w-xl">
+              <div className="text-center max-w-lg w-full">
                 {mode === "timeTrial" ? (
                   <>
-                    <div className="text-3xl font-extrabold">
-                      {hp > 0 ? "Survived" : "Game Over"}
+                    <div className="font-pixel text-lg md:text-2xl text-[#00ffff] tracking-widest mb-4">
+                      {hp > 0 ? "* SURVIVED!" : "* TIME TRIAL FINISHED"}
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+                    {/* Survival Rank Banner */}
+                    <div className="flex items-center justify-center gap-3 mb-5">
+                      <RankBadge
+                        rank={getTimeTrialRankClient(endAt ? endAt - surviveStart : nowMs - surviveStart)}
+                        size="md"
+                      />
+                      <div className="font-pixel text-xs text-[#ffff00] tracking-widest">
+                        {getTimeTrialTitleClient(endAt ? endAt - surviveStart : nowMs - surviveStart)}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-4">
                       <Stat label="Survival Time" value={timerText} />
                       <Stat label="HP Remaining" value={String(hp)} />
-                      {bestTimeTrialMs > 0 && (
-                        <>
-                          <Stat label="Best Time" value={fmtMs(bestTimeTrialMs)} />
-                          <Stat
-                            label="Status"
-                            value={timeTrialImproved ? "New Best!" : "Submitted"}
-                          />
-                        </>
-                      )}
+                      <Stat
+                        label="Personal Best"
+                        value={fmtMs(Math.max(bestTimeTrialMs, endAt ? endAt - surviveStart : 0))}
+                      />
+                      <Stat
+                        label="Next Tier Goal"
+                        value={getNextTierGoal(endAt ? endAt - surviveStart : nowMs - surviveStart)}
+                      />
                     </div>
 
                     {timeTrialSubmissionStatus && (
-                      <div className={`mt-3 text-sm font-mono ${timeTrialSubmissionStatus === "success" ? "text-green-400" :
-                        timeTrialSubmissionStatus === "error" ? "text-red-400" :
-                          "text-white/80"
-                        }`}>
-                        {timeTrialSubmissionMsg}
+                      <div className={`font-pixel text-[10px] px-3 py-2 border-2 mb-4 ${
+                        timeTrialSubmissionStatus === "success"
+                          ? "text-[#00ff00] border-[#00ff00]"
+                          : timeTrialSubmissionStatus === "error"
+                          ? "text-red-400 border-red-500"
+                          : "text-neutral-300 border-neutral-600"
+                      }`}>
+                        * {timeTrialSubmissionMsg}
                       </div>
                     )}
                   </>
                 ) : (
                   <>
-                    <div className="text-3xl font-extrabold">
-                      {iAmWinner ? "Victory" : "Defeat"}
+                    <div className={`font-pixel text-lg md:text-2xl tracking-widest mb-4 ${
+                      iAmWinner ? 'text-[#ffff00]' : 'text-red-500'
+                    }`}>
+                      {iAmWinner ? "* VICTORY" : "* DEFEAT"}
                     </div>
 
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+                    <div className="grid grid-cols-2 gap-3 mb-4">
                       <Stat label="Survival Time" value={timerText} />
                       <Stat label="HP Remaining" value={String(hp)} />
                       <Stat label="Rank Change" value={rankChangeText || "—"} />
@@ -4152,9 +4218,9 @@ export default function Game({
 
                 <button
                   onClick={exitToMenu}
-                  className="mt-6 px-5 py-2 rounded-xl border-2 border-white hover:bg-white/10 font-semibold"
+                  className="font-pixel text-xs border-2 border-white hover:bg-white hover:text-black px-6 py-3 transition cursor-pointer"
                 >
-                  Back to Main Menu
+                  [ BACK TO MAIN MENU ]
                 </button>
               </div>
             </Overlay>
@@ -4176,17 +4242,19 @@ export default function Game({
 
 function Overlay({ children }) {
   return (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/85 backdrop-blur-[1px] pointer-events-none">
-      <div className="px-6 py-8 pointer-events-auto">{children}</div>
+    <div className="absolute inset-0 flex items-center justify-center bg-black/92 pointer-events-none">
+      <div className="px-6 py-8 pointer-events-auto undertale-box bg-black text-white max-w-[90vw] max-h-[90vh] overflow-y-auto">
+        {children}
+      </div>
     </div>
   );
 }
 
 function Stat({ label, value }) {
   return (
-    <div className="rounded-xl border border-white/30 bg-black p-3">
-      <div className="text-xs text-white/60">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-white">{value}</div>
+    <div className="border-2 border-white/40 bg-black p-3 text-left hover:border-white transition">
+      <div className="font-pixel text-[9px] text-neutral-400 tracking-wider mb-1">* {label.toUpperCase()}</div>
+      <div className="font-pixel text-sm text-white">{value}</div>
     </div>
   );
 }

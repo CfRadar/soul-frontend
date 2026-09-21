@@ -133,119 +133,152 @@ export default function FriendsPanel({ me, onBack }) {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 font-mono">
-      {/* top bar */}
-      <div className="max-w-4xl mx-auto border border-white/80 rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 flex items-center justify-between">
-          <div>
-            <div className="text-xl tracking-widest">FRIENDS</div>
-            <div className="text-xs opacity-70 mt-1">
-              UID: <span className="opacity-100">{me?.uid}</span>
-            </div>
+    <div className="w-full h-full undertale-box p-4 md:p-6 flex flex-col min-h-0 bg-black text-white">
+      {/* Header */}
+      <div className="pb-3 border-b-2 border-white flex items-center justify-between flex-shrink-0">
+        <div>
+          <div className="font-pixel text-sm md:text-base text-[#00ff00]">
+            * FRIENDS & SOULS
           </div>
-
-          <button
-            onClick={onBack}
-            className="border border-white/70 px-4 py-2 rounded-xl hover:bg-white hover:text-black transition text-sm"
-          >
-            BACK
-          </button>
+          <div className="font-dialogue text-base text-neutral-300 mt-1">
+            * YOUR SOUL ID: <span className="text-white select-all">{me?.uid}</span>
+          </div>
         </div>
+        <button
+          onClick={onBack}
+          className="font-pixel text-xs border-2 border-white px-3 py-2 hover:bg-white hover:text-black transition cursor-pointer"
+        >
+          [ BACK ]
+        </button>
+      </div>
 
-        <div className="h-px bg-white/40" />
-
-        {/* send request */}
-        <div className="px-5 py-5">
-          <div className="text-sm opacity-80">ADD FRIEND BY UID</div>
-
-          <div className="mt-3 flex gap-3">
+      {/* Scrollable Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto pr-1 mt-4 space-y-5">
+        {/* Add Friend */}
+        <div className="undertale-box-green p-3 md:p-4">
+          <div className="font-pixel text-xs text-[#00ff00] mb-3">
+            * ADD SOUL BY UID
+          </div>
+          <div className="flex gap-2">
             <input
               value={uidInput}
               onChange={(e) => setUidInput(e.target.value)}
               placeholder="SD-XXXXXX"
-              className="flex-1 bg-black border border-white/60 rounded-xl px-4 py-3 outline-none"
+              className="flex-1 bg-black border-2 border-white px-3 py-2 font-pixel text-xs text-[#00ff00] outline-none focus:border-[#00ff00] transition"
+              onKeyDown={(e) => e.key === "Enter" && sendFriendRequest()}
             />
             <button
               onClick={sendFriendRequest}
-              className="border border-white/70 rounded-xl px-4 py-3 hover:bg-white hover:text-black transition"
+              className="font-pixel text-xs border-2 border-[#00ff00] text-[#00ff00] hover:bg-[#00ff00] hover:text-black px-3 py-2 transition cursor-pointer"
             >
-              SEND
+              [ SEND ]
             </button>
           </div>
-
-          {msg && <div className="mt-3 text-xs opacity-80">{msg}</div>}
+          {msg && (
+            <div className="mt-2 font-dialogue text-base text-[#00ffff]">
+              * {msg}
+            </div>
+          )}
         </div>
 
-        <div className="h-px bg-white/30" />
+        {/* Requests Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Incoming */}
+          <div className="undertale-box-thin p-3">
+            <div className="font-pixel text-[10px] text-neutral-300 mb-3 tracking-wider">
+              INCOMING ({incoming.length})
+            </div>
+            <div className="space-y-2">
+              {incoming.length === 0 ? (
+                <div className="font-dialogue text-base text-neutral-500">
+                  * No pending requests.
+                </div>
+              ) : (
+                incoming.map((p) => (
+                  <div
+                    key={p.uid}
+                    className="border-2 border-white/30 px-3 py-2 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-pixel text-[10px] text-white truncate">{p.username}</div>
+                      <div className="font-dialogue text-sm text-neutral-400">{p.uid}</div>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => acceptRequest(p.uid)}
+                        className="font-pixel text-[9px] border-2 border-[#00ff00] text-[#00ff00] hover:bg-[#00ff00] hover:text-black px-2 py-1 transition cursor-pointer"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        onClick={() => declineRequest(p.uid)}
+                        className="font-pixel text-[9px] border-2 border-neutral-600 text-neutral-400 hover:border-white hover:text-white px-2 py-1 transition cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
 
-        {/* requests */}
-        <div className="px-5 py-5 grid md:grid-cols-2 gap-4">
-          <Panel title={`INCOMING (${incoming.length})`}>
-            {incoming.length === 0 ? (
-              <Empty>no requests</Empty>
-            ) : (
-              incoming.map((p) => (
-                <Row key={p.uid}>
-                  <div>
-                    <div className="text-sm">{p.username}</div>
-                    <div className="text-xs opacity-70">{p.uid}</div>
+          {/* Outgoing */}
+          <div className="undertale-box-thin p-3">
+            <div className="font-pixel text-[10px] text-neutral-300 mb-3 tracking-wider">
+              OUTGOING ({outgoing.length})
+            </div>
+            <div className="space-y-2">
+              {outgoing.length === 0 ? (
+                <div className="font-dialogue text-base text-neutral-500">
+                  * No outgoing requests.
+                </div>
+              ) : (
+                outgoing.map((p) => (
+                  <div
+                    key={p.uid}
+                    className="border-2 border-white/30 px-3 py-2 flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-pixel text-[10px] text-white truncate">{p.username}</div>
+                      <div className="font-dialogue text-sm text-neutral-400">{p.uid}</div>
+                    </div>
+                    <div className="font-pixel text-[9px] text-neutral-500 tracking-wider">PENDING</div>
                   </div>
-                  <div className="flex gap-2">
-                    <Btn onClick={() => acceptRequest(p.uid)}>ACCEPT</Btn>
-                    <Btn soft onClick={() => declineRequest(p.uid)}>
-                      DECLINE
-                    </Btn>
-                  </div>
-                </Row>
-              ))
-            )}
-          </Panel>
-
-          <Panel title={`OUTGOING (${outgoing.length})`}>
-            {outgoing.length === 0 ? (
-              <Empty>no outgoing</Empty>
-            ) : (
-              outgoing.map((p) => (
-                <Row key={p.uid}>
-                  <div>
-                    <div className="text-sm">{p.username}</div>
-                    <div className="text-xs opacity-70">{p.uid}</div>
-                  </div>
-                  <div className="text-xs opacity-60">pending</div>
-                </Row>
-              ))
-            )}
-          </Panel>
+                ))
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="h-px bg-white/30" />
-
-        {/* friends list */}
-        <div className="px-5 py-5">
-          <div className="text-sm opacity-80">YOUR FRIENDS ({friends.length})</div>
-
-          <div className="mt-4 grid gap-3">
+        {/* Friends List */}
+        <div>
+          <div className="font-pixel text-xs text-white mb-3 tracking-wider">
+            * YOUR FRIENDS ({friends.length})
+          </div>
+          <div className="space-y-2">
             {friends.length === 0 ? (
-              <Empty>no friends yet</Empty>
+              <div className="undertale-box-thin p-4 text-center font-dialogue text-base text-neutral-500">
+                * But nobody came. Add a friend by UID above.
+              </div>
             ) : (
               friends.map((f) => (
                 <div
                   key={f.uid}
-                  className="border border-white/50 rounded-2xl p-4 flex items-center justify-between"
+                  className="border-2 border-white/40 hover:border-[#00ff00] p-3 flex items-center justify-between gap-3 transition"
                 >
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <div className="text-sm">{f.username}</div>
-                      <div className="text-xs opacity-70">{f.uid}</div>
-                    </div>
+                  <div className="flex items-center gap-3 min-w-0">
                     <RankBadge rank={f.rank} rating={f.rating} size="sm" />
+                    <div className="min-w-0">
+                      <div className="font-pixel text-[10px] text-white truncate">{f.username}</div>
+                      <div className="font-dialogue text-sm text-neutral-400">{f.uid}</div>
+                    </div>
                   </div>
-
                   <button
                     onClick={() => inviteFriend(f.uid)}
-                    className="border border-white/70 px-4 py-2 rounded-xl hover:bg-white hover:text-black transition text-sm"
+                    className="font-pixel text-[9px] border-2 border-[#00ffff] text-[#00ffff] hover:bg-[#00ffff] hover:text-black px-3 py-1.5 transition cursor-pointer whitespace-nowrap flex-shrink-0"
                   >
-                    INVITE
+                    [ INVITE ]
                   </button>
                 </div>
               ))
@@ -254,38 +287,35 @@ export default function FriendsPanel({ me, onBack }) {
         </div>
       </div>
 
-      {/* ✅ INVITE POPUP */}
+      {/* Invite Popup Modal */}
       {invitePopup && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg border border-white/80 rounded-2xl bg-black p-6">
-            <div className="text-lg tracking-widest">FRIEND INVITE</div>
-            <div className="mt-3 text-sm opacity-90">
-              <span className="opacity-70">From:</span>{" "}
-              {invitePopup.from?.username || "Unknown"}
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
+          <div className="w-full max-w-sm undertale-box p-6 bg-black text-white">
+            <div className="text-center mb-4">
+              <span className="text-[#ff0000] text-2xl animate-heartbeat">❤️</span>
+              <div className="font-pixel text-sm text-[#00ffff] mt-2">
+                * SOUL DUEL INVITATION
+              </div>
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="font-dialogue text-lg text-neutral-300 text-center mb-2">
+              * <span className="text-white">{invitePopup.from?.username || "Unknown"}</span> challenges you to a duel!
+            </div>
+            <div className="flex justify-center mb-5">
               <RankBadge rank={invitePopup.from?.rank} rating={invitePopup.from?.rating} size="sm" />
             </div>
-
-            <div className="mt-5 h-px bg-white/30" />
-
-            <div className="mt-5 flex gap-3">
+            <div className="flex gap-3 font-pixel text-xs">
               <button
                 onClick={() => acceptInvite(invitePopup.inviteId)}
-                className="flex-1 border border-white/80 rounded-xl px-4 py-3 hover:bg-white hover:text-black transition"
+                className="flex-1 border-2 border-[#ff9900] text-[#ff9900] py-2.5 hover:bg-[#ff9900] hover:text-black transition cursor-pointer"
               >
-                ACCEPT
+                [ ACCEPT ]
               </button>
               <button
                 onClick={() => declineInvite(invitePopup.inviteId)}
-                className="flex-1 border border-white/40 rounded-xl px-4 py-3 hover:bg-white hover:text-black transition"
+                className="flex-1 border-2 border-neutral-600 text-neutral-400 py-2.5 hover:border-white hover:text-white transition cursor-pointer"
               >
-                DECLINE
+                [ DECLINE ]
               </button>
-            </div>
-
-            <div className="mt-4 text-[11px] opacity-70">
-              Match will start automatically after accept.
             </div>
           </div>
         </div>
@@ -294,20 +324,20 @@ export default function FriendsPanel({ me, onBack }) {
   );
 }
 
-/* ---------------- UI bits (B/W lines vibe) ---------------- */
+/* ---------------- Minimal UI helpers preserved ---------------- */
 
 function Panel({ title, children }) {
   return (
-    <div className="border border-white/40 rounded-2xl p-4">
-      <div className="text-xs opacity-70 tracking-widest">{title}</div>
-      <div className="mt-3 grid gap-2">{children}</div>
+    <div className="border-2 border-white/40 p-3">
+      <div className="font-pixel text-[10px] opacity-70 tracking-widest">{title}</div>
+      <div className="mt-2 grid gap-2">{children}</div>
     </div>
   );
 }
 
 function Row({ children }) {
   return (
-    <div className="border border-white/30 rounded-xl px-3 py-3 flex items-center justify-between gap-3">
+    <div className="border border-white/30 px-3 py-2 flex items-center justify-between gap-3">
       {children}
     </div>
   );
@@ -318,10 +348,10 @@ function Btn({ children, onClick, soft = false }) {
     <button
       onClick={onClick}
       className={
-        "text-xs px-3 py-2 rounded-lg border transition " +
+        "font-pixel text-[9px] px-3 py-1.5 border-2 transition cursor-pointer " +
         (soft
-          ? "border-white/40 hover:bg-white hover:text-black"
-          : "border-white/70 hover:bg-white hover:text-black")
+          ? "border-neutral-600 text-neutral-400 hover:border-white hover:text-white"
+          : "border-white text-white hover:bg-white hover:text-black")
       }
     >
       {children}
@@ -330,5 +360,7 @@ function Btn({ children, onClick, soft = false }) {
 }
 
 function Empty({ children }) {
-  return <div className="text-xs opacity-60">{children}</div>;
+  return <div className="font-dialogue text-base text-neutral-500">* {children}</div>;
 }
+
+

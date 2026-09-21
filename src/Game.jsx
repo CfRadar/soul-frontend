@@ -523,6 +523,14 @@ export default function Game({
     lasers: [],
     nextAttackMs: 0,
     attackCount: 0,
+    missileLasers: [],
+    undyingVortexes: [],
+    undyingPhantom: null,
+    soulShards: [],
+    shardsPurged: 0,
+    shardsRequired: 3,
+    staggeredUntilMs: 0,
+    particles: [],
   });
 
   const shakeRef = useRef({ until: 0, amp: 0 });
@@ -551,6 +559,23 @@ export default function Game({
     sonicBoomUntil: 0,
     bossPauseStart: 0,
     bossPauseTotal: 0,
+    x: 0,
+    y: 120,
+    baseY: 120,
+    slamState: null,
+    slamTimer: 0,
+    shockwaves: [],
+    earthDebris: [],
+    dustClouds: [],
+    godRays: [],
+    celestialStars: [],
+    swordCascades: [],
+    lightPillars: [],
+    missileLasers: [],
+    undyingVortexes: [],
+    undyingStalker: null,
+    cameraPunch: { zoom: 1, targetZoom: 1, offsetY: 0 },
+    timeDilation: 1.0,
   });
 
   const goddessBossRef = useRef({
@@ -851,6 +876,201 @@ export default function Game({
     } catch { }
   }
 
+  function playSlamImpactSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      // Heavy sub-bass thump
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(160, now);
+      osc.frequency.exponentialRampToValueAtTime(28, now + 0.65);
+      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.65);
+      osc.start(now);
+      osc.stop(now + 0.65);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      // Noise punch for seismic earth crunch
+      const bufferSize = Math.floor(ctx.sampleRate * 0.4);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.08));
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const noiseFilter = ctx.createBiquadFilter();
+      noiseFilter.type = "lowpass";
+      noiseFilter.frequency.setValueAtTime(750, now);
+      noiseFilter.frequency.exponentialRampToValueAtTime(90, now + 0.4);
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.4, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+    } catch { }
+  }
+
+  function playStarChimeSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      [880, 1108, 1320, 1760].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.035);
+        gain.gain.setValueAtTime(0.12, now + idx * 0.035);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.035 + 0.45);
+        osc.start(now + idx * 0.035);
+        osc.stop(now + idx * 0.035 + 0.45);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+      });
+    } catch { }
+  }
+
+  function playStarWhooshSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(650, now);
+      osc.frequency.exponentialRampToValueAtTime(140, now + 0.4);
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+      osc.start(now);
+      osc.stop(now + 0.4);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch { }
+  }
+
+  function playLaserTargetLockSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(1400, now);
+      osc.frequency.setValueAtTime(1850, now + 0.05);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+      osc.start(now);
+      osc.stop(now + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch { }
+  }
+
+  function playMissileDescendSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(1200, now);
+      osc.frequency.exponentialRampToValueAtTime(180, now + 0.55);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.55);
+      osc.start(now);
+      osc.stop(now + 0.55);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch { }
+  }
+
+  function playMissileExplosionSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      // Sub punch
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(35, now + 0.35);
+      gain.gain.setValueAtTime(0.45, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+      osc.start(now);
+      osc.stop(now + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      // Noise burst
+      const bufferSize = Math.floor(ctx.sampleRate * 0.25);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.05));
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.35, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+      noise.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+    } catch { }
+  }
+
+  function playUndyingPulseSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(520, now);
+      osc.frequency.exponentialRampToValueAtTime(260, now + 0.6);
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+      osc.start(now);
+      osc.stop(now + 0.6);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+    } catch { }
+  }
+
+  function playUndyingShatterSound() {
+    try {
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioUnlockedRef.current) return;
+      const now = ctx.currentTime;
+      // High-pitched crystal shatter
+      [1500, 1920, 2400, 3100].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(freq, now + idx * 0.02);
+        osc.frequency.exponentialRampToValueAtTime(120, now + idx * 0.02 + 0.4);
+        gain.gain.setValueAtTime(0.2, now + idx * 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.02 + 0.4);
+        osc.start(now + idx * 0.02);
+        osc.stop(now + idx * 0.02 + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+      });
+    } catch { }
+  }
+
   function addShake(amount = 10, ms = 140) {
     const now = Date.now();
     shakeRef.current.amp = Math.max(shakeRef.current.amp, amount);
@@ -910,6 +1130,16 @@ export default function Game({
                   life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
                   color: Math.random() > 0.5 ? "white" : "gold"
                 });
+              }
+
+              // DISPEL PERSISTENT UNDYING ATTACKS!
+              if (rad.undyingStalker || (rad.undyingVortexes && rad.undyingVortexes.length > 0)) {
+                playUndyingShatterSound();
+                rad.undyingStalker = null;
+                rad.undyingVortexes = [];
+                healTextRef.current = { text: "⚡ UNDYING ATTACK DISPELLED! ⚡", until: Date.now() + 2500 };
+                setHpPulse(true);
+                setTimeout(() => setHpPulse(false), 300);
               }
            }
            
@@ -1280,6 +1510,14 @@ export default function Game({
       lasers: [],
       nextAttackMs: 0,
       attackCount: 0,
+      missileLasers: [],
+      undyingVortexes: [],
+      undyingPhantom: null,
+      soulShards: [],
+      shardsPurged: 0,
+      shardsRequired: 3,
+      staggeredUntilMs: 0,
+      particles: [],
     };
     lastHitAtRef.current = -9999;
     prevHpRef.current = 100;
@@ -1314,6 +1552,23 @@ export default function Game({
       sonicBoomUntil: 0,
       bossPauseStart: 0,
       bossPauseTotal: 0,
+      x: 0,
+      y: 120,
+      baseY: 120,
+      slamState: null,
+      slamTimer: 0,
+      shockwaves: [],
+      earthDebris: [],
+      dustClouds: [],
+      godRays: [],
+      celestialStars: [],
+      swordCascades: [],
+      lightPillars: [],
+      missileLasers: [],
+      undyingVortexes: [],
+      undyingStalker: null,
+      cameraPunch: { zoom: 1, targetZoom: 1, offsetY: 0 },
+      timeDilation: 1.0,
     };
     radParticlesRef.current = {
       ambient: [],
@@ -1360,14 +1615,7 @@ export default function Game({
     loop._lastNow = undefined;
 
     cancelAnimationFrame(rafRef.current);
-    if (!document.hidden) {
-      rafRef.current = requestAnimationFrame(loop);
-    } else {
-      // Force it to start ticking if match begins while alt-tabbed
-      if (!window.bgTicker) {
-        window.bgTicker = setInterval(loop, 100);
-      }
-    }
+    rafRef.current = requestAnimationFrame(loop);
   }
 
   function endMatch(wid) {
@@ -1400,10 +1648,6 @@ export default function Game({
     }
 
     cancelAnimationFrame(rafRef.current);
-    if (window.bgTicker) {
-      clearInterval(window.bgTicker);
-      window.bgTicker = null;
-    }
 
     try {
       if (phaseRef.current === PHASE.QUEUE && mode !== "timeTrial") {
@@ -1469,36 +1713,36 @@ export default function Game({
     }
   }
 
-  // Handle visibility return for smooth dt catching and background simulation
+  // Handle visibility return: pause rAF when hidden, resume cleanly on return
   useEffect(() => {
     const handleVisChange = () => {
       if (!document.hidden) {
-        // Returning to focus
-        if (window.bgTicker) {
-          clearInterval(window.bgTicker);
-          window.bgTicker = null;
-        }
+        // Returned to focus: reset _lastNow so dt isn't a huge spike, restart rAF
+        // On focus return: reset _lastNow so we don't get a massive dt spike
         loop._lastNow = Date.now();
-        if (phaseRef.current === PHASE.PLAYING) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = requestAnimationFrame(loop);
-        }
-      } else {
-        // Going to background
-        cancelAnimationFrame(rafRef.current);
-        if (!window.bgTicker && phaseRef.current === PHASE.PLAYING) {
-          window.bgTicker = setInterval(loop, 100); // 10 FPS logic in background
-        }
       }
+      // Do NOT stop rAF on hide — let the browser throttle it naturally.
+      // The loop reschedules itself at the top, so it keeps going regardless.
     };
     document.addEventListener("visibilitychange", handleVisChange);
     return () => {
       document.removeEventListener("visibilitychange", handleVisChange);
-      if (window.bgTicker) {
-        clearInterval(window.bgTicker);
-        window.bgTicker = null;
-      }
     };
+  }, []);
+
+  // Watchdog: if the loop stalls for > 2s while playing, restart it
+  useEffect(() => {
+    const watchdog = setInterval(() => {
+      if (phaseRef.current !== PHASE.PLAYING) return;
+      const lastTick = loop._lastTickMs ?? 0;
+      if (Date.now() - lastTick > 2000) {
+        console.warn("[GameLoop] Watchdog detected stall – restarting loop");
+        loop._lastNow = Date.now();
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(loop);
+      }
+    }, 1000);
+    return () => clearInterval(watchdog);
   }, []);
 
   // --- game loop ---
@@ -1567,7 +1811,8 @@ export default function Game({
   }
 
   function isIFrameActive(now) {
-    return now - lastHitAtRef.current < 650;
+    const isDashing = dashRef.current && dashRef.current.active && now < dashRef.current.until;
+    return isDashing || (now - lastHitAtRef.current < 650);
   }
 
   function isGuardActive(now) {
@@ -1587,21 +1832,191 @@ export default function Game({
     const p = playerRef.current;
     boss.animTime += dt;
 
-    if (elapsedMs >= boss.nextAttackMs) {
+    // Check if boss is currently staggered from dispelling the Undying Phantom
+    const isStaggered = elapsedMs < boss.staggeredUntilMs;
+
+    if (elapsedMs >= boss.nextAttackMs && !isStaggered) {
       boss.attackCount++;
       const rand = rngRef.current;
-      const attackType = Math.floor(rand() * 4);
+      const hasActiveUndying = boss.undyingPhantom || (boss.undyingVortexes && boss.undyingVortexes.length > 0);
+      
+      // Determine attack type (0: Missile Laser, 1: Undying, 2: Gaster Blasters, 3: Bone Wall)
+      let attackType;
+      if (!hasActiveUndying && boss.attackCount % 3 === 2) {
+        attackType = 1; // Prioritize Undying attack early in the encounter
+      } else {
+        const pool = [0, 0, 1, 2, 3];
+        attackType = pool[Math.floor(rand() * pool.length)];
+      }
 
       if (attackType === 0) {
+        // --- MISSILE LASER ATTACK ---
+        // Missiles descend from above onto the arena, with laser markers indicating their impact zones.
+        // Players must quickly move away from the targeted areas to avoid damage.
+        playLaserTargetLockSound();
+        const isTracking = rand() > 0.25; // 75% tracking (was 60%)
+        const missileCount = isTracking ? 6 : 7; // more missiles
+
+        for (let m = 0; m < missileCount; m++) {
+          let targetX, targetY;
+          const delay = m * 0.22; // tighter stagger (was 0.28)
+          const chargeDuration = 0.75 + delay; // faster charge (was 0.95)
+
+          if (isTracking) {
+            // Tracking Salvo: aggressive lead prediction
+            const leadDist = 60; // more lead (was 45)
+            const pDirX = dashRef.current.lastDx || 0;
+            const pDirY = dashRef.current.lastDy || 0;
+            targetX = clamp(p.x + pDirX * leadDist * m + (rand() - 0.5) * 35, 50, w - 50);
+            targetY = clamp(p.y + pDirY * leadDist * m + (rand() - 0.5) * 35, 50, h - 50);
+          } else {
+            // Grid Bombing: denser coverage
+            const col = m % 3;
+            const row = Math.floor(m / 3);
+            targetX = clamp(w * 0.18 + col * (w * 0.32) + (rand() - 0.5) * 30, 50, w - 50);
+            targetY = clamp(h * 0.28 + row * (h * 0.35) + (rand() - 0.5) * 30, 50, h - 50);
+          }
+
+          boss.missileLasers.push({
+            id: Math.random(),
+            targetX,
+            targetY,
+            radius: 50,
+            chargeDuration,
+            chargeElapsed: 0,
+            state: "TARGETING",
+            missileY: -140,
+            speed: 1700, // faster descent (was 1250)
+            explosionElapsed: 0,
+            explosionLife: 0.35,
+            hasHitPlayer: false
+          });
+        }
+        boss.nextAttackMs = elapsedMs + 2000 + rand() * 300; // faster cooldown (was 2800+400)
+
+      } else if (attackType === 1) {
+        // --- UNDYING ATTACKS ---
+        // Persistent attacks that remain active for a set duration or continue until a specific condition is met,
+        // forcing players to constantly adapt and avoid them.
+        if (!hasActiveUndying) {
+          const chooseVortex = rand() > 0.5;
+
+          if (chooseVortex) {
+            // VARIANT A: Undying Karma Vortexes (Set Duration: 12 seconds)
+            boss.undyingVortexes = [
+              {
+                id: 1,
+                centerX: w * 0.3,
+                centerY: h * 0.45,
+                radiusX: 120,
+                radiusY: 80,
+                orbitSpeed: 1.4, // faster (was 0.85)
+                angle: 0,
+                duration: 14.0, // longer duration (was 12)
+                elapsed: 0,
+                pulseTimer: 0,
+                coreRadius: 20,
+                activePulse: null,
+                x: w * 0.3,
+                y: h * 0.45
+              },
+              {
+                id: 2,
+                centerX: w * 0.7,
+                centerY: h * 0.55,
+                radiusX: 120,
+                radiusY: 80,
+                orbitSpeed: -1.25, // faster (was -0.75)
+                angle: Math.PI,
+                duration: 14.0,
+                elapsed: 0,
+                pulseTimer: 0.9,
+                coreRadius: 20,
+                activePulse: null,
+                x: w * 0.7,
+                y: h * 0.55
+              }
+            ];
+            playBossWarningSound();
+          } else {
+            // VARIANT B: The Undying Wraith Phantom (Condition-based: Purge 3 Pure Soul Shards!)
+            boss.undyingPhantom = {
+              x: w / 2,
+              y: 90,
+              vx: 0,
+              vy: 0,
+              radius: 22,
+              speed: 180, // much faster chase (was 100)
+              elapsed: 0,
+              beamAngle: 0
+            };
+            boss.shardsPurged = 0;
+            boss.shardsRequired = 3;
+            // Spawn 3 Pure Soul Shards spaced across the arena
+            boss.soulShards = [
+              { id: 1, x: clamp(w * 0.2 + (rand() - 0.5) * 60, 60, w - 60), y: clamp(h * 0.3 + (rand() - 0.5) * 50, 60, h - 60), r: 12 },
+              { id: 2, x: clamp(w * 0.8 + (rand() - 0.5) * 60, 60, w - 60), y: clamp(h * 0.4 + (rand() - 0.5) * 50, 60, h - 60), r: 12 },
+              { id: 3, x: clamp(w * 0.5 + (rand() - 0.5) * 80, 60, w - 60), y: clamp(h * 0.75 + (rand() - 0.5) * 50, 60, h - 60), r: 12 },
+            ];
+            playBossWarningSound();
+          }
+          boss.nextAttackMs = elapsedMs + 1900 + rand() * 300; // faster (was 2600+400)
+        } else {
+          // An undying attack is already active! Maintain heavy pressure with Twin Gaster Blasters
+          boss.lasers.push({ x: w / 2, y: p.y, isHoriz: true, chargeTime: 0.38, activeTime: 0.45, elapsed: 0, spawnedAtMs: elapsedMs, thick: 90 });
+          boss.lasers.push({ x: p.x, y: h / 2, isHoriz: false, chargeTime: 0.38, activeTime: 0.45, elapsed: 0, spawnedAtMs: elapsedMs, thick: 90 });
+          boss.lasers.push({ x: w * 0.5, y: p.y + (rand() > 0.5 ? 80 : -80), isHoriz: true, chargeTime: 0.55, activeTime: 0.35, elapsed: 0, spawnedAtMs: elapsedMs, thick: 70 });
+          playLaserChargeSound();
+          boss.nextAttackMs = elapsedMs + 1600 + rand() * 300; // faster (was 2200+400)
+        }
+
+      } else if (attackType === 2) {
+        // Twin Gaster Blaster lasers — faster charge, bigger beams, cross-pattern
+        boss.lasers.push({
+          x: w / 2,
+          y: p.y,
+          isHoriz: true,
+          chargeTime: 0.38, // faster charge (was 0.55)
+          activeTime: 0.45, // longer active (was 0.35)
+          elapsed: 0,
+          spawnedAtMs: elapsedMs,
+          thick: 90, // wider (was 80)
+        });
+        boss.lasers.push({
+          x: p.x,
+          y: h / 2,
+          isHoriz: false,
+          chargeTime: 0.38,
+          activeTime: 0.45,
+          elapsed: 0,
+          spawnedAtMs: elapsedMs,
+          thick: 90,
+        });
+        // Third diagonal pressure laser
+        boss.lasers.push({
+          x: clamp(p.x + (rand() > 0.5 ? 100 : -100), 50, w - 50),
+          y: 0,
+          isHoriz: false,
+          chargeTime: 0.50,
+          activeTime: 0.40,
+          elapsed: 0,
+          spawnedAtMs: elapsedMs,
+          thick: 65,
+        });
+        playLaserChargeSound();
+        boss.nextAttackMs = elapsedMs + 1400 + rand() * 300; // faster (was 1900+400)
+
+      } else if (attackType === 3) {
+        // Bone Wall — faster, narrower gap, double wall variant
         const isHoriz = rand() > 0.5;
-        const gapSize = 85; // tighter gap for increased challenge
-        const gapStart = 30 + rand() * (isHoriz ? h - 160 : w - 160);
-        const speed = 360; // faster bone wall
+        const gapSize = 65; // smaller safe gap (was 90)
+        const gapStart = 30 + rand() * (isHoriz ? h - 130 : w - 130);
+        const speed = 480; // faster (was 360)
         const fromLeftOrTop = rand() > 0.5;
 
-        const count = isHoriz ? h / 30 : w / 30;
+        const count = isHoriz ? h / 28 : w / 28; // denser bones
         for (let i = 0; i <= count; i++) {
-          const pos = i * 30;
+          const pos = i * 28;
           if (pos > gapStart && pos < gapStart + gapSize) continue;
           boss.projectiles.push({
             type: 'bone',
@@ -1612,57 +2027,11 @@ export default function Game({
             r: 12,
           });
         }
-      } else if (attackType === 1) {
-        // Twin Gaster Blaster lasers - horizontal and vertical centered on player
-        boss.lasers.push({
-          x: w / 2,
-          y: p.y,
-          isHoriz: true,
-          chargeTime: 0.55,
-          activeTime: 0.35,
-          elapsed: 0,
-          spawnedAtMs: elapsedMs,
-          thick: 80,
-        });
-        boss.lasers.push({
-          x: p.x,
-          y: h / 2,
-          isHoriz: false,
-          chargeTime: 0.55,
-          activeTime: 0.35,
-          elapsed: 0,
-          spawnedAtMs: elapsedMs,
-          thick: 80,
-        });
-        playLaserChargeSound();
-      } else if (attackType === 2) {
-        const cx = w / 2;
-        const cy = h / 2;
-        const numBullets = 24;
-        const angleOffset = rand() * Math.PI * 2;
-        for (let i = 0; i < numBullets; i++) {
-          boss.projectiles.push({
-            type: 'ring',
-            cx, cy,
-            angle: angleOffset + (i / numBullets) * Math.PI * 2,
-            radius: 520,
-            r: 9,
-            speed: 2.2,
-            contractSpeed: 160,
-          });
-        }
-      } else if (attackType === 3) {
-        const shiftX = (rand() - 0.5) * 80;
-        const shiftY = (rand() - 0.5) * 80;
-        boss.lasers.push({ x: p.x + shiftX, y: h / 2, isHoriz: false, chargeTime: 0.55, activeTime: 0.35, elapsed: 0, spawnedAtMs: elapsedMs, thick: 80 });
-        boss.lasers.push({ x: w / 2, y: p.y + shiftY, isHoriz: true, chargeTime: 0.55, activeTime: 0.35, elapsed: 0, spawnedAtMs: elapsedMs, thick: 80 });
-        playLaserChargeSound();
+        boss.nextAttackMs = elapsedMs + 1200 + rand() * 300; // faster (was 1700+400)
       }
-
-      boss.nextAttackMs = Math.max(elapsedMs + 1300, elapsedMs + 800 + rand() * 700);
-      if (attackType === 3 || attackType === 1) boss.nextAttackMs -= 200;
     }
 
+    // Update Bone Projectiles
     for (let i = boss.projectiles.length - 1; i >= 0; i--) {
       const pr = boss.projectiles[i];
       if (pr.type === 'bone') {
@@ -1678,6 +2047,7 @@ export default function Game({
       }
     }
 
+    // Update Gaster Lasers
     for (let i = boss.lasers.length - 1; i >= 0; i--) {
       const L = boss.lasers[i];
       const prevElapsed = L.elapsed;
@@ -1694,11 +2064,125 @@ export default function Game({
         boss.lasers.splice(i, 1);
       }
     }
+
+    // --- UPDATE MISSILE LASER ATTACK ---
+    if (boss.missileLasers && boss.missileLasers.length > 0) {
+      for (let i = boss.missileLasers.length - 1; i >= 0; i--) {
+        const m = boss.missileLasers[i];
+        if (m.state === "TARGETING") {
+          m.chargeElapsed += dt;
+          if (m.chargeElapsed >= m.chargeDuration) {
+            m.state = "DESCENDING";
+            m.missileY = -140;
+            playMissileDescendSound();
+          }
+        } else if (m.state === "DESCENDING") {
+          m.missileY += m.speed * dt;
+          // Spectral thruster sparks
+          if (Math.random() > 0.35 && boss.particles.length < 50) {
+            boss.particles.push({
+              x: m.targetX + (Math.random() - 0.5) * 8,
+              y: m.missileY - 18,
+              vx: (Math.random() - 0.5) * 40,
+              vy: -70 - Math.random() * 80,
+              life: 0.22,
+              elapsed: 0,
+              r: 2.2,
+              color: Math.random() > 0.5 ? "#00f0ff" : "#ff3366"
+            });
+          }
+          if (m.missileY >= m.targetY) {
+            m.state = "EXPLODING";
+            m.explosionElapsed = 0;
+            playMissileExplosionSound();
+            addShake(18, 250);
+          }
+        } else if (m.state === "EXPLODING") {
+          m.explosionElapsed += dt;
+          if (m.explosionElapsed >= m.explosionLife) {
+            boss.missileLasers.splice(i, 1);
+          }
+        }
+      }
+    }
+
+    // --- UPDATE UNDYING KARMA VORTEXES (SET DURATION: 12s) ---
+    if (boss.undyingVortexes && boss.undyingVortexes.length > 0) {
+      for (let i = boss.undyingVortexes.length - 1; i >= 0; i--) {
+        const v = boss.undyingVortexes[i];
+        v.elapsed += dt;
+        v.angle += v.orbitSpeed * dt;
+        v.x = v.centerX + Math.cos(v.angle) * v.radiusX;
+        v.y = v.centerY + Math.sin(v.angle * 1.3) * v.radiusY;
+
+        // Pulse wave every 1.8s
+        v.pulseTimer += dt;
+        if (v.pulseTimer >= 1.8) {
+          v.pulseTimer = 0;
+          v.activePulse = { radius: 10, maxRadius: 75, life: 0.7, elapsed: 0 };
+          playUndyingPulseSound();
+        }
+
+        if (v.activePulse) {
+          v.activePulse.elapsed += dt;
+          v.activePulse.radius += (v.activePulse.maxRadius - v.activePulse.radius) * 4.5 * dt;
+          if (v.activePulse.elapsed >= v.activePulse.life) {
+            v.activePulse = null;
+          }
+        }
+
+        // 12s duration expiration
+        if (v.elapsed >= v.duration) {
+          for (let k = 0; k < 16; k++) {
+            const spAng = Math.random() * Math.PI * 2;
+            const spSpd = 50 + Math.random() * 150;
+            boss.particles.push({
+              x: v.x, y: v.y, vx: Math.cos(spAng) * spSpd, vy: Math.sin(spAng) * spSpd,
+              life: 0.5, elapsed: 0, r: 2.5, color: "#00f0ff"
+            });
+          }
+          boss.undyingVortexes.splice(i, 1);
+        }
+      }
+    }
+
+    // --- UPDATE UNDYING WRAITH PHANTOM (CONDITION-BASED: PURGE 3 SOUL SHARDS) ---
+    if (boss.undyingPhantom) {
+      const s = boss.undyingPhantom;
+      s.elapsed += dt;
+      const angleToP = Math.atan2(p.y - s.y, p.x - s.x);
+      s.vx = (s.vx || 0) + Math.cos(angleToP) * 160 * dt;
+      s.vy = (s.vy || 0) + Math.sin(angleToP) * 160 * dt;
+      s.vx *= 0.94;
+      s.vy *= 0.94;
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.beamAngle = angleToP;
+    }
+
+    // --- UPDATE BOSS PARTICLES ---
+    for (let i = boss.particles.length - 1; i >= 0; i--) {
+      const pt = boss.particles[i];
+      pt.elapsed += dt;
+      pt.x += pt.vx * dt;
+      pt.y += pt.vy * dt;
+      if (pt.elapsed >= pt.life) {
+        boss.particles.splice(i, 1);
+      }
+    }
   }
 
   function loop() {
+    // ── SCHEDULE NEXT FRAME FIRST ──────────────────────────────────────────
+    // This must come before ANY early-return so the loop can never die due to
+    // a null canvas, a thrown error, or any other guard condition.
+    if (phaseRef.current === PHASE.PLAYING) {
+      rafRef.current = requestAnimationFrame(loop);
+    }
+    loop._lastTickMs = Date.now(); // for watchdog
+
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) return; // skip this frame – next rAF already queued above
 
     const ctx = canvas.getContext("2d");
     const w = canvas.width;
@@ -1708,6 +2192,11 @@ export default function Game({
     const prevNow = loop._lastNow ?? now;
     const dt = Math.min(0.05, (now - prevNow) / 1000);
     loop._lastNow = now;
+
+    const radState = radianceBossRef.current;
+    const timeDilation = (radState && radState.active && radState.timeDilation !== undefined) ? radState.timeDilation : 1.0;
+    const simDt = dt * timeDilation;
+    try {
 
     const keys = keysRef.current;
     
@@ -1729,7 +2218,7 @@ export default function Game({
     // Dash Mechanics
     const DASH_DURATION = 160;
     const DASH_SPEED = 900;
-    const DASH_COOLDOWN = 2000;
+    const DASH_COOLDOWN = 1750; // Balanced cooldown for deliberate boss dodging
     
     if (keys.has("shift") && !dashRef.current.active && now > dashRef.current.cooldownUntil) {
        // Determine Dash Direction
@@ -1766,16 +2255,16 @@ export default function Game({
     // Apply Movement
     if (dashRef.current.active && now < dashRef.current.until) {
        // Executing Dash Movement
-       p.x += dashRef.current.dirX * DASH_SPEED * dt;
-       p.y += dashRef.current.dirY * DASH_SPEED * dt;
+       p.x += dashRef.current.dirX * DASH_SPEED * simDt;
+       p.y += dashRef.current.dirY * DASH_SPEED * simDt;
        
        // Create trail
        playerTrailRef.current.push({ x: p.x, y: p.y, lifeMs: 200, maxLifeMs: 200 });
     } else {
        // Normal Movement
        dashRef.current.active = false;
-       p.x += ax * speed * dt;
-       p.y += ay * speed * dt;
+       p.x += ax * speed * simDt;
+       p.y += ay * speed * simDt;
     }
     
     p.x = clamp(p.x, 18, w - 18);
@@ -1863,75 +2352,386 @@ export default function Game({
         
         rad.bossStartMs = elapsedMs;
         rad.phaseTimeMs = elapsedMs;
-        rad.nextAttackAtMs = elapsedMs + 1500;
+        rad.nextAttackAtMs = elapsedMs + 1600;
         rad.hp = 100;
         rad.orbCharge = 0;
         rad.collectibleOrb = { x: 50 + rngRef.current() * (w - 100), y: 50 + rngRef.current() * (h - 100), r: 10 };
+        rad.x = w / 2;
+        rad.y = 120;
+        rad.baseY = 120;
+        rad.slamState = null;
+        rad.shockwaves = [];
+        rad.earthDebris = [];
+        rad.dustClouds = [];
+        rad.celestialStars = [];
+        rad.swordCascades = [];
+        rad.lightPillars = [];
+        rad.timeDilation = 1.0;
+        rad.cameraPunch = { zoom: 1, targetZoom: 1, offsetY: 0 };
+        rad.godRays = [
+          { topOffset: -300, bottomOffset: -380, topW: 60, bottomW: 160, baseAlpha: 0.12, swaySpeed: 2800, phase: 0 },
+          { topOffset: -170, bottomOffset: -210, topW: 75, bottomW: 190, baseAlpha: 0.16, swaySpeed: 2300, phase: 1.2 },
+          { topOffset: -50,  bottomOffset: -60,  topW: 90, bottomW: 220, baseAlpha: 0.19, swaySpeed: 2900, phase: 2.5 },
+          { topOffset: 60,   bottomOffset: 80,   topW: 85, bottomW: 210, baseAlpha: 0.18, swaySpeed: 2500, phase: 3.9 },
+          { topOffset: 180,  bottomOffset: 230,  topW: 75, bottomW: 180, baseAlpha: 0.15, swaySpeed: 3100, phase: 5.1 },
+          { topOffset: 310,  bottomOffset: 390,  topW: 60, bottomW: 150, baseAlpha: 0.11, swaySpeed: 2600, phase: 3.4 },
+        ];
       }
 
       if (rad.active && !rad.defeated) {
+        if (!rad.x) rad.x = w / 2;
+        if (!rad.y) rad.y = 120;
+        if (!rad.baseY) rad.baseY = 120;
+        if (!rad.godRays || rad.godRays.length === 0 || rad.godRays[0].topOffset === undefined) {
+          rad.godRays = [
+            { topOffset: -300, bottomOffset: -380, topW: 60, bottomW: 160, baseAlpha: 0.12, swaySpeed: 2800, phase: 0 },
+            { topOffset: -170, bottomOffset: -210, topW: 75, bottomW: 190, baseAlpha: 0.16, swaySpeed: 2300, phase: 1.2 },
+            { topOffset: -50,  bottomOffset: -60,  topW: 90, bottomW: 220, baseAlpha: 0.19, swaySpeed: 2900, phase: 2.5 },
+            { topOffset: 60,   bottomOffset: 80,   topW: 85, bottomW: 210, baseAlpha: 0.18, swaySpeed: 2500, phase: 3.9 },
+            { topOffset: 180,  bottomOffset: 230,  topW: 75, bottomW: 180, baseAlpha: 0.15, swaySpeed: 3100, phase: 5.1 },
+            { topOffset: 310,  bottomOffset: 390,  topW: 60, bottomW: 150, baseAlpha: 0.11, swaySpeed: 2600, phase: 3.4 },
+          ];
+        }
+
+        // Smooth camera punch recovery
+        if (rad.cameraPunch) {
+          rad.cameraPunch.zoom += ((rad.cameraPunch.targetZoom || 1) - rad.cameraPunch.zoom) * Math.min(1, dt * 6);
+        }
+
         // Handle Radiance Attacks
+        // Only block slam (type 0) from re-triggering if already slamming; other attacks fire freely
         if (elapsedMs >= rad.nextAttackAtMs) {
-          const attackType = Math.floor(rngRef.current() * 3);
+          const isEnraged = rad.hp <= 50;
+          const attackType = Math.floor(rngRef.current() * 5);
           rad.attackType = attackType;
-          if (attackType === 0) {
-            // 5 aggressive homing light spheres
-            rad.homingOrbs.push({ x: w / 2, y: 100, vx: 0, vy: 0, r: 10 });
-            rad.homingOrbs.push({ x: w / 2 - 60, y: 100, vx: 0, vy: 0, r: 10 });
-            rad.homingOrbs.push({ x: w / 2 + 60, y: 100, vx: 0, vy: 0, r: 10 });
-            rad.homingOrbs.push({ x: w / 2 - 120, y: 100, vx: 0, vy: 0, r: 10 });
-            rad.homingOrbs.push({ x: w / 2 + 120, y: 100, vx: 0, vy: 0, r: 10 });
+
+          if (attackType === 0 && rad.slamState) {
+            // Slam mid-slam: skip this attack and reschedule soon
+            rad.nextAttackAtMs = elapsedMs + 600;
+          } else if (attackType === 0) {
+            // --- ATTACK 0: GROUND SLAM ATTACK ---
+            rad.slamState = "TELEGRAPH";
+            rad.slamTimer = 0;
+            rad.slamTargetX = clamp(p.x, 60, w - 60);
+            rad.slamTargetY = h - 60;
+            rad.slamRadius = 75;
+            const cd = isEnraged ? 2100 : 2700;
+            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
+
           } else if (attackType === 1) {
-            // Criss-cross wall spikes (horizontal + vertical simultaneously)
-            rad.wallSpikes.push({ isVert: true, x: 30 + rngRef.current() * (w - 60), y: 0, width: 55, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-            rad.wallSpikes.push({ isVert: true, x: 30 + rngRef.current() * (w - 60), y: 0, width: 55, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-            rad.wallSpikes.push({ isVert: false, x: 0, y: 30 + rngRef.current() * (h - 60), width: 55, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-            rad.wallSpikes.push({ isVert: false, x: 0, y: 30 + rngRef.current() * (h - 60), width: 55, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+            // --- ATTACK 1: CELESTIAL STAR STORM ---
+            rad.celestialStars = [];
+            const starCount = isEnraged ? 40 : 32;
+            for (let s = 0; s < starCount; s++) {
+              const ang = (s / starCount) * Math.PI * 2;
+              const dist = 65 + rngRef.current() * 45;
+              rad.celestialStars.push({
+                x: (rad.x || w / 2) + Math.cos(ang) * dist,
+                y: (rad.y || 120) + Math.sin(ang) * dist,
+                vx: 0,
+                vy: 0,
+                hoverTimer: (isEnraged ? 0.22 : 0.30) + (s % 4) * 0.10,
+                speed: (isEnraged ? 1040 : 920) + rngRef.current() * 160,
+                r: 9,
+                launched: false,
+                trail: [],
+                life: 3.5,
+                elapsed: 0
+              });
+            }
+            playStarChimeSound();
+            const cd = isEnraged ? 1800 : 2300;
+            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
+
           } else if (attackType === 2) {
-            // Tri-beam sweeping lasers
-            for (let b = 0; b < 3; b++) {
-              rad.lasers.push({ cx: w / 2, cy: 120, angle: (b * Math.PI * 2) / 3, rotSpeed: 1.8, length: 900, thick: 45, chargeTime: 0.75, activeTime: 2.2, elapsed: 0, spawnedAtMs: elapsedMs });
+            // --- ATTACK 2: TACTICAL PRESSURE (SWEEPING LASERS, 4-WAY SPIKES, OR NAIL WALL) ---
+            const subRoll = rngRef.current();
+            if (subRoll < 0.45) {
+              const laserCount = isEnraged ? 4 : 3;
+              for (let b = 0; b < laserCount; b++) {
+                rad.lasers.push({
+                  cx: rad.x || w / 2,
+                  cy: rad.y || 120,
+                  angle: (b * Math.PI * 2) / laserCount,
+                  rotSpeed: isEnraged ? 2.3 : 1.9,
+                  length: 1050,
+                  thick: 46,
+                  chargeTime: isEnraged ? 0.55 : 0.65,
+                  activeTime: 2.5,
+                  elapsed: 0,
+                  spawnedAtMs: elapsedMs
+                });
+              }
+              playLaserChargeSound();
+            } else if (subRoll < 0.75) {
+              const x1 = clamp(p.x + (rngRef.current() > 0.5 ? 115 : -115), 40, w - 40);
+              const x2 = clamp(p.x + (x1 > p.x ? -115 : 115), 40, w - 40);
+              const y1 = clamp(p.y + (rngRef.current() > 0.5 ? 95 : -95), 40, h - 40);
+              const y2 = clamp(p.y + (y1 > p.y ? -95 : 95), 40, h - 40);
+              rad.wallSpikes.push({ isVert: true, x: x1, y: 0, width: 42, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+              rad.wallSpikes.push({ isVert: true, x: x2, y: 0, width: 42, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+              rad.wallSpikes.push({ isVert: false, x: 0, y: y1, width: 42, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+              rad.wallSpikes.push({ isVert: false, x: 0, y: y2, width: 42, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
+            } else {
+              // Radiant Nail Wall: Horizontal sweeping blade curtain
+              const fromLeft = rngRef.current() > 0.5;
+              const safeY = clamp(p.y + (rngRef.current() - 0.5) * 160, 80, h - 80);
+              for (let sy = 50; sy < h - 40; sy += 55) {
+                if (Math.abs(sy - safeY) < 70) continue;
+                rad.wallSpikes.push({
+                  isVert: false,
+                  x: fromLeft ? 0 : w,
+                  y: sy,
+                  width: 32,
+                  length: 0,
+                  maxLength: w * 0.85,
+                  state: "WARN",
+                  timer: 0,
+                  spawnedAtMs: elapsedMs
+                });
+              }
+            }
+            const cd = isEnraged ? 1500 : 1900;
+            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
+
+          } else if (attackType === 3) {
+            // --- ATTACK 3: DIVINE SWORD RAIN ---
+            // Luminous blades descend from the heavens in 2 rapid waves with safe evasion lanes!
+            if (!rad.swordCascades) rad.swordCascades = [];
+            const waves = 2;
+            for (let wave = 0; wave < waves; wave++) {
+              const gap1 = 80 + rngRef.current() * (w - 160);
+              const gap2 = clamp(gap1 + (rngRef.current() > 0.5 ? 260 : -260), 80, w - 80);
+              const gapWidth = 85;
+              const waveDelay = wave * 0.52;
+
+              for (let colX = 35; colX <= w - 35; colX += 44) {
+                if (Math.abs(colX - gap1) < gapWidth / 2 || Math.abs(colX - gap2) < gapWidth / 2) {
+                  continue; // safe corridor
+                }
+                rad.swordCascades.push({
+                  x: colX,
+                  y: -50,
+                  vy: 0,
+                  width: 18,
+                  height: 64,
+                  state: "WARN",
+                  timer: 0,
+                  warnDuration: 0.42,
+                  delay: waveDelay,
+                  speed: isEnraged ? 1350 : 1180,
+                  spawnedAtMs: elapsedMs
+                });
+              }
+            }
+            playStarChimeSound();
+            const cd = isEnraged ? 1700 : 2200;
+            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
+
+          } else if (attackType === 4) {
+            // --- ATTACK 4: SOLAR LIGHT PILLARS ---
+            // Scorching holy columns lock onto player and arena zones before roaring into pillars of light!
+            if (!rad.lightPillars) rad.lightPillars = [];
+            const pillarCount = isEnraged ? 5 : 4;
+            const targets = [clamp(p.x, 50, w - 50)];
+            for (let k = 1; k < pillarCount; k++) {
+              const offset = (k % 2 === 1 ? 1 : -1) * (140 + Math.floor(k / 2) * 180);
+              targets.push(clamp(p.x + offset + (rngRef.current() - 0.5) * 60, 50, w - 50));
+            }
+            for (const tx of targets) {
+              rad.lightPillars.push({
+                x: tx,
+                width: 68,
+                state: "WARN",
+                timer: 0,
+                warnDuration: isEnraged ? 0.48 : 0.60,
+                eruptDuration: 0.70,
+                hasHitPlayer: false,
+                spawnedAtMs: elapsedMs
+              });
             }
             playLaserChargeSound();
+            const cd = isEnraged ? 1500 : 1900;
+            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
           }
-          rad.nextAttackAtMs = elapsedMs + 1800 + rngRef.current() * 900;
         }
 
-        // Update attacks
-        for (let i = rad.homingOrbs.length - 1; i >= 0; i--) {
-          const orb = rad.homingOrbs[i];
-          const dx = p.x - orb.x;
-          const dy = p.y - orb.y;
-          const dist = Math.hypot(dx, dy) || 1;
-          const targetSpeed = 170;
-          orb.vx += (dx / dist) * 240 * dt;
-          orb.vy += (dy / dist) * 240 * dt;
-          const curSpeed = Math.hypot(orb.vx, orb.vy);
-          if (curSpeed > targetSpeed) {
-            orb.vx = (orb.vx / curSpeed) * targetSpeed;
-            orb.vy = (orb.vy / curSpeed) * targetSpeed;
+        // --- UPDATE GROUND SLAM ---
+        if (rad.slamState === "TELEGRAPH") {
+          rad.slamTimer += dt; // use real dt, not simDt, so it can't be stalled by timeDilation
+          rad.y = rad.baseY - Math.sin(Math.min(1, rad.slamTimer / 0.75) * Math.PI * 0.5) * 65;
+          if (rad.slamTimer >= 0.75) {
+            rad.slamState = "PLUNGE";
+            rad.slamTimer = 0;
           }
-          orb.x += orb.vx * dt;
-          orb.y += orb.vy * dt;
-          if (elapsedMs > rad.bossStartMs + 60000 && curSpeed > 300) rad.homingOrbs.splice(i, 1);
+        } else if (rad.slamState === "PLUNGE") {
+          rad.slamTimer += dt; // real dt so timeDilation doesn't slow the plunge
+          const plungeSpeed = 1600;
+          rad.x += (rad.slamTargetX - rad.x) * Math.min(1, dt * 10);
+          rad.y += plungeSpeed * dt;
+          // Safety: if plunge takes > 1s (shouldn't happen), force impact
+          if (rad.y >= rad.slamTargetY || rad.slamTimer >= 1.0) {
+            rad.y = rad.slamTargetY;
+            rad.slamState = "IMPACT";
+            rad.slamTimer = 0;
+            playSlamImpactSound();
+            addShake(28, 400);
+            rad.timeDilation = 0.35; // Dramatic slow motion
+            if (rad.cameraPunch) {
+              rad.cameraPunch.targetZoom = 1.15;
+              rad.cameraPunch.offsetY = -20;
+            }
+            // Spawn golden shockwave ring
+            rad.shockwaves.push({
+              x: rad.slamTargetX,
+              y: rad.slamTargetY,
+              radius: 15,
+              maxRadius: 380,
+              speed: 500,
+              thickness: 18,
+              life: 0.75,
+              elapsed: 0,
+              hasHitPlayer: false
+            });
+            // Spawn 16 earth debris chunks
+            for (let d = 0; d < 16; d++) {
+              const ang = Math.PI + (rngRef.current() - 0.5) * Math.PI * 1.6;
+              const spd = 200 + rngRef.current() * 320;
+              rad.earthDebris.push({
+                x: rad.slamTargetX + (rngRef.current() - 0.5) * 30,
+                y: rad.slamTargetY,
+                vx: Math.cos(ang) * spd,
+                vy: -Math.abs(Math.sin(ang)) * spd * 1.2,
+                size: 4 + rngRef.current() * 6,
+                rotation: rngRef.current() * Math.PI * 2,
+                rotSpeed: (rngRef.current() - 0.5) * 10,
+                life: 0.9 + rngRef.current() * 0.4,
+                elapsed: 0
+              });
+            }
+            // Spawn 12 dust clouds
+            for (let c = 0; c < 12; c++) {
+              const dir = rngRef.current() > 0.5 ? 1 : -1;
+              rad.dustClouds.push({
+                x: rad.slamTargetX + dir * (10 + rngRef.current() * 30),
+                y: rad.slamTargetY - 5,
+                vx: dir * (120 + rngRef.current() * 180),
+                vy: -20 - rngRef.current() * 40,
+                radius: 12 + rngRef.current() * 15,
+                maxRadius: 35 + rngRef.current() * 20,
+                life: 0.8,
+                elapsed: 0
+              });
+            }
+          }
+        } else if (rad.slamState === "IMPACT") {
+          rad.timeDilation += (1.0 - rad.timeDilation) * Math.min(1, simDt * 4);
+          if (rad.cameraPunch) {
+            rad.cameraPunch.targetZoom = 1.0;
+            rad.cameraPunch.offsetY = 0;
+          }
+          // Use real elapsedMs so timeDilation doesn't stall this
+          if (!rad.slamImpactStartMs) rad.slamImpactStartMs = elapsedMs;
+          if (elapsedMs - rad.slamImpactStartMs >= 500) {
+            rad.slamState = "RETURN";
+            rad.slamReturnStartMs = elapsedMs;
+            rad.slamImpactStartMs = 0;
+          }
+        } else if (rad.slamState === "RETURN") {
+          rad.timeDilation += (1.0 - rad.timeDilation) * Math.min(1, dt * 4); // recover dilation with real dt
+          rad.x += (w / 2 - rad.x) * Math.min(1, dt * 5);
+          rad.y += (rad.baseY - rad.y) * Math.min(1, dt * 5);
+          // Use real elapsedMs for timeout so timeDilation can't stall it
+          if (!rad.slamReturnStartMs) rad.slamReturnStartMs = elapsedMs;
+          if ((Math.abs(rad.y - rad.baseY) < 5 && Math.abs(rad.x - w / 2) < 5) || (elapsedMs - rad.slamReturnStartMs) >= 1800) {
+            rad.x = w / 2;
+            rad.y = rad.baseY;
+            rad.timeDilation = 1.0;
+            rad.slamState = null;
+            rad.slamReturnStartMs = 0;
+            // Ensure next attack doesn't fire immediately (prevents same-frame re-trigger)
+            rad.nextAttackAtMs = Math.max(rad.nextAttackAtMs, elapsedMs + 1200);
+          }
         }
 
+        // --- UPDATE SHOCKWAVES ---
+        for (let i = rad.shockwaves.length - 1; i >= 0; i--) {
+          const sw = rad.shockwaves[i];
+          sw.elapsed += simDt;
+          sw.radius += sw.speed * simDt;
+          if (sw.elapsed >= sw.life || sw.radius >= sw.maxRadius) {
+            rad.shockwaves.splice(i, 1);
+          }
+        }
+
+        // --- UPDATE EARTH DEBRIS ---
+        for (let i = rad.earthDebris.length - 1; i >= 0; i--) {
+          const d = rad.earthDebris[i];
+          d.elapsed += simDt;
+          d.vy += 850 * simDt; // gravity
+          d.x += d.vx * simDt;
+          d.y += d.vy * simDt;
+          d.rotation += d.rotSpeed * simDt;
+          if (d.elapsed >= d.life || d.y > h + 50) {
+            rad.earthDebris.splice(i, 1);
+          }
+        }
+
+        // --- UPDATE DUST CLOUDS ---
+        for (let i = rad.dustClouds.length - 1; i >= 0; i--) {
+          const c = rad.dustClouds[i];
+          c.elapsed += simDt;
+          c.x += c.vx * simDt;
+          c.y += c.vy * simDt;
+          c.radius += (c.maxRadius - c.radius) * 2.5 * simDt;
+          c.vx *= 0.94;
+          if (c.elapsed >= c.life) {
+            rad.dustClouds.splice(i, 1);
+          }
+        }
+
+        // --- UPDATE CELESTIAL STARS ---
+        for (let i = rad.celestialStars.length - 1; i >= 0; i--) {
+          const s = rad.celestialStars[i];
+          s.elapsed += simDt;
+          if (!s.launched) {
+            s.hoverTimer -= simDt;
+            if (s.hoverTimer <= 0) {
+              s.launched = true;
+              playStarWhooshSound();
+              const ang = Math.atan2(p.y - s.y, p.x - s.x);
+              s.vx = Math.cos(ang) * s.speed;
+              s.vy = Math.sin(ang) * s.speed;
+            }
+          } else {
+            s.x += s.vx * simDt;
+            s.y += s.vy * simDt;
+            s.trail.push({ x: s.x, y: s.y });
+            if (s.trail.length > 7) s.trail.shift();
+            if (s.x < -60 || s.x > w + 60 || s.y < -60 || s.y > h + 60 || s.elapsed >= s.life) {
+              rad.celestialStars.splice(i, 1);
+            }
+          }
+        }
+
+        // Update Wall Spikes
         for (let i = rad.wallSpikes.length - 1; i >= 0; i--) {
           const sp = rad.wallSpikes[i];
           const curElapsed = (elapsedMs - sp.spawnedAtMs) / 1000;
           sp.timer = curElapsed;
           
-          if (sp.state === "WARN" && curElapsed > 0.65) {
+          if (sp.state === "WARN" && curElapsed > 0.85) {
             sp.state = "EXTEND";
           } else if (sp.state === "EXTEND") {
             sp.length += 1200 * dt;
             if (sp.length >= sp.maxLength) { sp.length = sp.maxLength; sp.state = "RETRACT"; }
           } else if (sp.state === "RETRACT") {
-            sp.length -= 500 * dt;
+            sp.length -= 800 * dt;
             if (sp.length <= 0) rad.wallSpikes.splice(i, 1);
           }
         }
 
+        // Update Lasers
         for (let i = rad.lasers.length - 1; i >= 0; i--) {
           const L = rad.lasers[i];
           const prevElapsed = L.elapsed;
@@ -1949,6 +2749,46 @@ export default function Game({
             rad.lasers.splice(i, 1);
           } else if (!isCharging) {
             L.angle += L.rotSpeed * dt;
+          }
+        }
+
+        // --- UPDATE SWORD CASCADES ---
+        if (rad.swordCascades) {
+          for (let i = rad.swordCascades.length - 1; i >= 0; i--) {
+            const sc = rad.swordCascades[i];
+            const curElapsed = (elapsedMs - sc.spawnedAtMs) / 1000;
+            if (curElapsed < sc.delay) continue;
+            const activeTime = curElapsed - sc.delay;
+            if (sc.state === "WARN") {
+              if (activeTime >= sc.warnDuration) {
+                sc.state = "FALLING";
+                playLaserFireSound();
+              }
+            } else if (sc.state === "FALLING") {
+              sc.y += sc.speed * simDt;
+              if (sc.y > h + 100) {
+                rad.swordCascades.splice(i, 1);
+              }
+            }
+          }
+        }
+
+        // --- UPDATE SOLAR LIGHT PILLARS ---
+        if (rad.lightPillars) {
+          for (let i = rad.lightPillars.length - 1; i >= 0; i--) {
+            const pil = rad.lightPillars[i];
+            const curElapsed = (elapsedMs - pil.spawnedAtMs) / 1000;
+            if (pil.state === "WARN") {
+              if (curElapsed >= pil.warnDuration) {
+                pil.state = "ERUPT";
+                playLaserFireSound();
+                addShake(16, 250);
+              }
+            } else if (pil.state === "ERUPT") {
+              if (curElapsed >= pil.warnDuration + pil.eruptDuration) {
+                rad.lightPillars.splice(i, 1);
+              }
+            }
           }
         }
 
@@ -1984,8 +2824,19 @@ export default function Game({
           const currentElapsed = Date.now() - surviveStartRef.current;
           rad.bossPauseTotal = currentElapsed - rad.bossPauseStart;
           rad.homingOrbs = [];
+          rad.celestialStars = [];
+          rad.swordCascades = [];
+          rad.lightPillars = [];
+          rad.shockwaves = [];
+          rad.earthDebris = [];
+          rad.dustClouds = [];
+          rad.missileLasers = [];
+          rad.undyingVortexes = [];
+          rad.undyingStalker = null;
           rad.lasers = [];
           rad.wallSpikes = [];
+          rad.slamState = null;
+          rad.timeDilation = 1.0;
 
           // INCREASE MAX HP TO 150
           maxHpRef.current = 150;
@@ -2584,6 +3435,80 @@ export default function Game({
         }
       }
 
+      // Judgement Wraith Missile Laser Impact Zone Collision
+      if (!tookHit && bossRef.current && bossRef.current.missileLasers) {
+        const boss = bossRef.current;
+        for (let i = 0; i < boss.missileLasers.length; i++) {
+          const m = boss.missileLasers[i];
+          if (m.state === "EXPLODING" && !m.hasHitPlayer) {
+            const dist = Math.hypot(m.targetX - p.x, m.targetY - p.y);
+            if (dist < m.radius + p.r) {
+              tookHit = true;
+              m.hasHitPlayer = true;
+              applyDamage(24, null);
+              break;
+            }
+          }
+        }
+      }
+
+      // Judgement Wraith Undying Karma Vortexes Collision
+      if (!tookHit && bossRef.current && bossRef.current.undyingVortexes) {
+        const boss = bossRef.current;
+        for (let i = 0; i < boss.undyingVortexes.length; i++) {
+          const v = boss.undyingVortexes[i];
+          if (Math.hypot(v.x - p.x, v.y - p.y) < v.coreRadius + p.r) {
+            tookHit = true;
+            applyDamage(18, null);
+            break;
+          }
+          if (v.activePulse) {
+            const dist = Math.hypot(p.x - v.x, p.y - v.y);
+            if (Math.abs(dist - v.activePulse.radius) < p.r + 10) {
+              tookHit = true;
+              applyDamage(16, null);
+              break;
+            }
+          }
+        }
+      }
+
+      // Judgement Wraith Undying Phantom Collision
+      if (!tookHit && bossRef.current && bossRef.current.undyingPhantom) {
+        const s = bossRef.current.undyingPhantom;
+        if (Math.hypot(s.x - p.x, s.y - p.y) < s.radius + p.r) {
+          tookHit = true;
+          applyDamage(20, null);
+        }
+      }
+
+      // Judgement Wraith Soul Shard Collection (Purge Condition)
+      if (bossRef.current && bossRef.current.soulShards && bossRef.current.soulShards.length > 0) {
+        const boss = bossRef.current;
+        for (let i = boss.soulShards.length - 1; i >= 0; i--) {
+          const shard = boss.soulShards[i];
+          const dist = Math.hypot(p.x - shard.x, p.y - shard.y);
+          if (dist < p.r + shard.r + 6) {
+            boss.soulShards.splice(i, 1);
+            boss.shardsPurged = (boss.shardsPurged || 0) + 1;
+            playHealSound(20);
+            setHp((old) => Math.min(maxHpRef.current, old + 10));
+            setHpPulse(true);
+            setTimeout(() => setHpPulse(false), 200);
+
+            // Dispel condition fulfilled!
+            if (boss.shardsPurged >= (boss.shardsRequired || 3)) {
+              boss.undyingPhantom = null;
+              boss.soulShards = [];
+              playUndyingShatterSound();
+              addShake(25, 450);
+              boss.staggeredUntilMs = elapsedMs + 2500;
+              setHp((old) => Math.min(maxHpRef.current, old + 25));
+            }
+          }
+        }
+      }
+
       // Goddess Boss Collisions (Ascended Blade)
       const god = goddessBossRef.current;
       if (god.active && !god.defeated) {
@@ -2666,24 +3591,93 @@ export default function Game({
       }
 
       if (!tookHit && rad.active && !rad.defeated) {
-        // homing orbs
-        for (const orb of rad.homingOrbs) {
-          if (Math.hypot(orb.x - p.x, orb.y - p.y) < p.r + orb.r - 2) {
-            tookHit = true; applyDamage(18, orb); break;
+        // Celestial Stars (Golden Stars from Star Storm)
+        if (!tookHit && rad.celestialStars && rad.celestialStars.length > 0) {
+          for (let i = rad.celestialStars.length - 1; i >= 0; i--) {
+            const s = rad.celestialStars[i];
+            if (s.launched) {
+              const dist = Math.hypot(p.x - s.x, p.y - s.y);
+              if (dist < s.r + p.r + 3) {
+                tookHit = true;
+                applyDamage(20, null);
+                rad.celestialStars.splice(i, 1);
+                break;
+              }
+            }
           }
         }
+
+        // Golden Shockwaves
+        if (!tookHit && rad.shockwaves && rad.shockwaves.length > 0) {
+          for (const sw of rad.shockwaves) {
+            if (!sw.hasHitPlayer) {
+              const distToCenter = Math.hypot(p.x - sw.x, p.y - sw.y);
+              if (Math.abs(distToCenter - sw.radius) < sw.thickness / 2 + p.r) {
+                sw.hasHitPlayer = true;
+                tookHit = true;
+                applyDamage(22, null);
+                break;
+              }
+            }
+          }
+        }
+
+        // Divine Sword Rain (Descending blade cascade)
+        if (!tookHit && rad.swordCascades && rad.swordCascades.length > 0) {
+          for (let i = rad.swordCascades.length - 1; i >= 0; i--) {
+            const sw = rad.swordCascades[i];
+            if (sw.state === "FALLING") {
+              if (Math.abs(p.x - sw.x) < sw.width / 2 + p.r - 2 &&
+                  p.y >= sw.y - sw.height / 2 && p.y <= sw.y + sw.height / 2 + 10) {
+                tookHit = true;
+                applyDamage(22, null);
+                rad.swordCascades.splice(i, 1);
+                break;
+              }
+            }
+          }
+        }
+
+        // Solar Light Pillars (Holy columns of radiant fury)
+        if (!tookHit && rad.lightPillars && rad.lightPillars.length > 0) {
+          for (const pil of rad.lightPillars) {
+            if (pil.state === "ERUPT" && !pil.hasHitPlayer) {
+              if (Math.abs(p.x - pil.x) < pil.width / 2 + p.r - 2) {
+                pil.hasHitPlayer = true;
+                tookHit = true;
+                applyDamage(24, null);
+                break;
+              }
+            }
+          }
+        }
+
+        // Legacy homing orbs (consumed on impact)
+        if (!tookHit && rad.homingOrbs && rad.homingOrbs.length > 0) {
+          for (let i = rad.homingOrbs.length - 1; i >= 0; i--) {
+            const orb = rad.homingOrbs[i];
+            if (Math.hypot(orb.x - p.x, orb.y - p.y) < p.r + orb.r - 2) {
+              tookHit = true;
+              applyDamage(14, orb);
+              rad.homingOrbs.splice(i, 1);
+              break;
+            }
+          }
+        }
+
         // wall spikes
         if (!tookHit) {
           for (const sp of rad.wallSpikes) {
             if (sp.state === "EXTEND" || sp.state === "RETRACT") {
               if (sp.isVert) {
-                if (Math.abs(p.x - sp.x) < sp.width / 2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(22, null); break; }
+                if (Math.abs(p.x - sp.x) < sp.width / 2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(18, null); break; }
               } else {
-                if (Math.abs(p.y - sp.y) < sp.width / 2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(22, null); break; }
+                if (Math.abs(p.y - sp.y) < sp.width / 2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(18, null); break; }
               }
             }
           }
         }
+
         // lasers
         if (!tookHit) {
           for (const L of rad.lasers) {
@@ -2693,7 +3687,7 @@ export default function Game({
               const distToLine = Math.abs(dx * Math.sin(-L.angle) + dy * Math.cos(-L.angle));
               const forwardDist = dx * Math.cos(L.angle) + dy * Math.sin(L.angle);
               if (distToLine < L.thick / 2 + p.r - 2 && forwardDist > 0 && forwardDist < L.length) {
-                tookHit = true; applyDamage(25, null); break;
+                tookHit = true; applyDamage(20, null); break;
               }
             }
           }
@@ -2835,10 +3829,31 @@ export default function Game({
     ctx.save();
     ctx.translate(sx, sy);
 
+    // Low-angle camera punch for Radiance
+    if (rad.active && rad.cameraPunch && rad.cameraPunch.zoom > 1.001) {
+      const zoom = rad.cameraPunch.zoom;
+      ctx.translate(w / 2, h * 0.82);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-w / 2, -h * 0.82);
+    }
+
     // ====== THEME: BLACK + WHITE LINES (keep heart color unchanged) ======
     // background
     ctx.fillStyle = "rgb(0,0,0)";
     ctx.fillRect(0, 0, w, h);
+
+    // Moody Color Grading Vignette (deep grays + radiant gold aura)
+    if (rad.active && !rad.defeated) {
+      const moodyAlpha = rad.slamState ? 0.76 : 0.35;
+      const ry = rad.y || 120;
+      // Use w/2 for x so the vignette doesn't shift off-center during a side slam
+      const grad = ctx.createRadialGradient(w / 2, ry, 25, w / 2, h / 2, Math.max(w, h) * 0.85);
+      grad.addColorStop(0, "rgba(255, 220, 100, 0.10)");
+      grad.addColorStop(0.35, "rgba(24, 28, 38, 0.45)");
+      grad.addColorStop(1, `rgba(10, 12, 18, ${moodyAlpha})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+    }
 
     // arena border (white)
     ctx.strokeStyle = "rgba(255,255,255,0.95)";
@@ -2892,38 +3907,78 @@ export default function Game({
     }
 
     if (boss && boss.state === "ACTIVE") {
-      ctx.fillStyle = "rgba(255, 0, 0, 0.8)";
-      ctx.font = "bold 16px monospace";
+      const isStaggered = elapsedMs < boss.staggeredUntilMs;
+
+      // Boss Header & Stagger status
       ctx.textAlign = "center";
-      ctx.fillText("BOSS PHASE", w / 2, 30);
+      if (isStaggered) {
+        ctx.fillStyle = "#ffff55";
+        ctx.font = "bold 16px monospace";
+        const remStagger = Math.max(0, (boss.staggeredUntilMs - elapsedMs) / 1000).toFixed(1);
+        ctx.fillText(`* JUDGEMENT WRAITH STAGGERED! (${remStagger}s) *`, w / 2, 30);
+      } else {
+        ctx.fillStyle = "#00f0ff";
+        ctx.font = "bold 16px monospace";
+        ctx.fillText("JUDGEMENT WRAITH", w / 2, 30);
+      }
 
       const bx = w / 2;
       const by = 80 + Math.sin(boss.animTime * 3) * 10;
 
+      // Draw Judgement Wraith Skull
       ctx.fillStyle = "white";
       ctx.beginPath();
       ctx.arc(bx, by, 30, 0, Math.PI * 2);
       ctx.fill();
 
+      // Eye Sockets
       ctx.fillStyle = "black";
       ctx.beginPath();
       ctx.arc(bx - 12, by - 5, 8, 0, Math.PI * 2);
       ctx.arc(bx + 12, by - 5, 8, 0, Math.PI * 2);
       ctx.fill();
 
-      if (rngRef.current() > 0.95) {
-        ctx.fillStyle = "red";
+      // Glowing Eye (Cyan & Red Karma eye)
+      if (isStaggered) {
+        // Stunned dizzy spiral eyes
+        ctx.strokeStyle = "#ffff55";
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(bx - 12, by - 5, 3, 0, Math.PI * 2);
+        ctx.arc(bx - 12, by - 5, 4, 0, Math.PI * 2);
+        ctx.arc(bx + 12, by - 5, 4, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Orbiting Stun Stars above head
+        for (let st = 0; st < 3; st++) {
+          const stAng = (now / 250) + (st * Math.PI * 2) / 3;
+          const stX = bx + Math.cos(stAng) * 36;
+          const stY = by - 36 + Math.sin(stAng * 1.5) * 8;
+          ctx.fillStyle = "#ffff00";
+          ctx.beginPath();
+          ctx.arc(stX, stY, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = "#00f0ff";
+        ctx.beginPath();
+        ctx.arc(bx - 12, by - 5, 4, 0, Math.PI * 2);
         ctx.fill();
+        if (rngRef.current() > 0.92) {
+          ctx.fillStyle = "#ff3366";
+          ctx.beginPath();
+          ctx.arc(bx + 12, by - 5, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
+      // Smile / Jaw
       ctx.strokeStyle = "black";
       ctx.lineWidth = 4;
       ctx.beginPath();
       ctx.arc(bx, by + 5, 12, 0.2, Math.PI - 0.2);
       ctx.stroke();
 
+      // Render Classic Bones
       for (const pr of boss.projectiles) {
         ctx.fillStyle = "white";
         ctx.beginPath();
@@ -2931,9 +3986,10 @@ export default function Game({
         ctx.fill();
       }
 
+      // Render Gaster Lasers
       for (const L of boss.lasers) {
         if (L.elapsed < L.chargeTime) {
-          ctx.fillStyle = "rgba(255, 0, 0, 0.3)";
+          ctx.fillStyle = "rgba(0, 240, 255, 0.35)";
           if (L.isHoriz) {
             ctx.fillRect(0, L.y - 2, w, 4);
           } else {
@@ -2943,7 +3999,7 @@ export default function Game({
           const activeRatio = (L.elapsed - L.chargeTime) / L.activeTime;
           const fade = 1 - activeRatio;
           ctx.fillStyle = `rgba(255, 255, 255, ${fade})`;
-          ctx.shadowColor = "red";
+          ctx.shadowColor = "#00f0ff";
           ctx.shadowBlur = 15;
           const th = L.thick * (1 - activeRatio * 0.2);
           if (L.isHoriz) {
@@ -2953,6 +4009,227 @@ export default function Game({
           }
           ctx.shadowBlur = 0;
         }
+      }
+
+      // --- RENDER MISSILE LASER ATTACK (CLEAN SOLID BEAMS, NO GUIDE CIRCLES, NO TEXT) ---
+      if (boss.missileLasers && boss.missileLasers.length > 0) {
+        for (const m of boss.missileLasers) {
+          if (m.state === "TARGETING" || m.state === "DESCENDING") {
+            // Clean Solid Vertical Laser Guidance Marker Beam
+            ctx.save();
+            ctx.globalCompositeOperation = "screen";
+            const beamAlpha = 0.4 + 0.3 * Math.sin(now / 70);
+            
+            // Outer laser glow shaft
+            ctx.strokeStyle = `rgba(0, 240, 255, ${beamAlpha * 0.4})`;
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(m.targetX, 0);
+            ctx.lineTo(m.targetX, m.targetY);
+            ctx.stroke();
+
+            // Core bright beam
+            ctx.strokeStyle = `rgba(255, 255, 255, ${beamAlpha * 0.9})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(m.targetX, 0);
+            ctx.lineTo(m.targetX, m.targetY);
+            ctx.stroke();
+
+            // Luminous focal ground spot where the beam strikes the earth
+            ctx.fillStyle = `rgba(0, 240, 255, ${beamAlpha * 0.85})`;
+            ctx.beginPath();
+            ctx.arc(m.targetX, m.targetY, 5 + Math.sin(now / 60) * 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(m.targetX, m.targetY, 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // Descending Kinetic Missile
+          if (m.state === "DESCENDING") {
+            ctx.save();
+            ctx.translate(m.targetX, m.missileY);
+
+            // Spectral Exhaust Plume
+            const plumeGrad = ctx.createLinearGradient(0, -35, 0, -5);
+            plumeGrad.addColorStop(0, "rgba(0, 240, 255, 0)");
+            plumeGrad.addColorStop(0.6, "rgba(255, 50, 100, 0.7)");
+            plumeGrad.addColorStop(1, "rgba(255, 255, 255, 0.95)");
+            ctx.fillStyle = plumeGrad;
+            ctx.beginPath();
+            ctx.moveTo(-6, -8);
+            ctx.lineTo(0, -38);
+            ctx.lineTo(6, -8);
+            ctx.closePath();
+            ctx.fill();
+
+            // Missile Kinetic Skeletal Body
+            ctx.fillStyle = "#ffffff";
+            ctx.strokeStyle = "#00f0ff";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, 14); // Nose tip
+            ctx.lineTo(6, 0);
+            ctx.lineTo(6, -12);
+            ctx.lineTo(10, -14); // Fin
+            ctx.lineTo(6, -18);
+            ctx.lineTo(-6, -18);
+            ctx.lineTo(-10, -14); // Fin
+            ctx.lineTo(-6, -12);
+            ctx.lineTo(-6, 0);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+
+          // Explosion Detonation Blast
+          if (m.state === "EXPLODING") {
+            const expRatio = Math.min(1, m.explosionElapsed / m.explosionLife);
+            const expRadius = m.radius * (1 + expRatio * 0.7);
+            const expAlpha = (1 - expRatio);
+
+            ctx.save();
+            ctx.globalCompositeOperation = "screen";
+            ctx.strokeStyle = `rgba(0, 240, 255, ${expAlpha * 0.9})`;
+            ctx.lineWidth = Math.max(2, 14 * (1 - expRatio));
+            ctx.beginPath();
+            ctx.arc(m.targetX, m.targetY, expRadius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.fillStyle = `rgba(255, 50, 100, ${expAlpha * 0.45})`;
+            ctx.beginPath();
+            ctx.arc(m.targetX, m.targetY, expRadius * 0.7, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+        }
+      }
+
+      // --- RENDER UNDYING KARMA VORTEXES (CLEAN, NO TEXT, NO TIMER ARCS) ---
+      if (boss.undyingVortexes && boss.undyingVortexes.length > 0) {
+        for (const v of boss.undyingVortexes) {
+          ctx.save();
+          // Active expanding pulse ring
+          if (v.activePulse) {
+            const pAlpha = 1 - v.activePulse.elapsed / v.activePulse.life;
+            ctx.globalCompositeOperation = "screen";
+            ctx.strokeStyle = `rgba(0, 240, 255, ${pAlpha * 0.85})`;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(v.x, v.y, v.activePulse.radius, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          // Outer Corona Ring
+          ctx.globalCompositeOperation = "screen";
+          ctx.fillStyle = "rgba(0, 240, 255, 0.25)";
+          ctx.beginPath();
+          ctx.arc(v.x, v.y, v.coreRadius * 2.2 + Math.sin(now / 150) * 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Rotating Plasma Spikes
+          ctx.save();
+          ctx.translate(v.x, v.y);
+          ctx.rotate(now / 400);
+          ctx.strokeStyle = "rgba(0, 240, 255, 0.8)";
+          ctx.lineWidth = 2;
+          for (let sp = 0; sp < 6; sp++) {
+            ctx.beginPath();
+            ctx.moveTo(v.coreRadius, 0);
+            ctx.lineTo(v.coreRadius + 12, 0);
+            ctx.stroke();
+            ctx.rotate(Math.PI / 3);
+          }
+          ctx.restore();
+
+          // Core Body
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(v.x, v.y, v.coreRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+
+      // --- RENDER UNDYING WRAITH PHANTOM (CLEAN, NO DOTTED TETHER, NO TEXT) ---
+      if (boss.undyingPhantom) {
+        const s = boss.undyingPhantom;
+        ctx.save();
+        // Ethereal Aura
+        ctx.globalCompositeOperation = "screen";
+        ctx.fillStyle = "rgba(0, 240, 255, 0.25)";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius * 2.2 + Math.sin(now / 180) * 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Spectral Skull Sprite
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.rotate(s.elapsed * 1.5);
+        ctx.fillStyle = "#0a0a20";
+        ctx.strokeStyle = "#00f0ff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, s.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Cyan Glowing Sockets
+        ctx.fillStyle = "#00f0ff";
+        ctx.beginPath();
+        ctx.arc(-7, -4, 4, 0, Math.PI * 2);
+        ctx.arc(7, -4, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.restore();
+      }
+
+      // --- RENDER PURE SOUL SHARDS (CLEAN CRYSTALS, NO HUD TEXT) ---
+      if (boss.soulShards && boss.soulShards.length > 0) {
+        for (const shard of boss.soulShards) {
+          ctx.save();
+          ctx.translate(shard.x, shard.y);
+          ctx.rotate(now / 400);
+
+          // Outer rotating aura
+          ctx.strokeStyle = "rgba(0, 240, 255, 0.7)";
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(0, 0, shard.r + 5 + Math.sin(now / 120) * 2, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Diamond Core
+          ctx.fillStyle = "#ffffff";
+          ctx.strokeStyle = "#00f0ff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(0, -shard.r);
+          ctx.lineTo(shard.r, 0);
+          ctx.lineTo(0, shard.r);
+          ctx.lineTo(-shard.r, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
+      // --- RENDER BOSS PARTICLES ---
+      if (boss.particles && boss.particles.length > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        for (const pt of boss.particles) {
+          ctx.fillStyle = pt.color;
+          ctx.beginPath();
+          ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
       }
     }
 
@@ -3045,18 +4322,140 @@ export default function Game({
       ctx.fillStyle = rad.defeated ? "rgba(255, 255, 255, 0.3)" : "rgba(255, 240, 180, 0.05)";
       ctx.fillRect(0, 0, w, h);
 
-      const bx = w / 2;
-      const by = 120 + Math.sin(now / 500) * 15;
+      const bx = rad.x || (w / 2);
+      const by = (rad.y !== undefined ? rad.y : 120) + (rad.slamState ? 0 : Math.sin(now / 500) * 12);
+
+      // Volumetric God Rays Streaming Downward (Broad ethereal shafts across the arena)
+      if (rad.godRays && !rad.defeated) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        const yTop = 0;
+        const yBottom = h;
+        const rayOriginX = w / 2; // Always from screen center — not boss x, so rays don't fly off-screen during slam
+        for (const ray of rad.godRays) {
+          const sway = Math.sin(now / ray.swaySpeed + ray.phase) * 18;
+          const xTop = rayOriginX + ray.topOffset + sway * 0.5;
+          const xBot = rayOriginX + ray.bottomOffset + sway;
+          const pulse = 0.75 + 0.25 * Math.sin(now / 900 + ray.phase);
+          const rayAlpha = ray.baseAlpha * pulse * (rad.slamState ? 1.45 : 0.85);
+
+          const x1Top = xTop - ray.topW / 2;
+          const x2Top = xTop + ray.topW / 2;
+          const x1Bot = xBot - ray.bottomW / 2;
+          const x2Bot = xBot + ray.bottomW / 2;
+
+          const rayGrad = ctx.createLinearGradient(0, yTop, 0, yBottom);
+          rayGrad.addColorStop(0, `rgba(255, 245, 180, ${rayAlpha})`);
+          rayGrad.addColorStop(0.35, `rgba(255, 225, 110, ${rayAlpha * 0.65})`);
+          rayGrad.addColorStop(1, "rgba(255, 205, 70, 0)");
+
+          ctx.fillStyle = rayGrad;
+          ctx.beginPath();
+          ctx.moveTo(x1Top, yTop);
+          ctx.lineTo(x2Top, yTop);
+          ctx.lineTo(x2Bot, yBottom);
+          ctx.lineTo(x1Bot, yBottom);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+
+
+      // --- RENDER GOLDEN SHOCKWAVES ---
+      if (rad.shockwaves && rad.shockwaves.length > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        for (const sw of rad.shockwaves) {
+          const swAlpha = Math.max(0, 1 - sw.elapsed / sw.life);
+          ctx.strokeStyle = `rgba(255, 230, 90, ${swAlpha * 0.95})`;
+          ctx.lineWidth = Math.max(2, sw.thickness * swAlpha);
+          ctx.beginPath();
+          ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
+          ctx.stroke();
+
+          ctx.fillStyle = `rgba(255, 215, 0, ${swAlpha * 0.25})`;
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // --- RENDER EARTH DEBRIS CHUNKS ---
+      if (rad.earthDebris && rad.earthDebris.length > 0) {
+        ctx.save();
+        for (const d of rad.earthDebris) {
+          const dAlpha = Math.max(0, 1 - d.elapsed / d.life);
+          ctx.save();
+          ctx.translate(d.x, d.y);
+          ctx.rotate(d.rotation);
+          ctx.fillStyle = `rgba(180, 140, 70, ${dAlpha})`;
+          ctx.strokeStyle = `rgba(255, 215, 0, ${dAlpha * 0.7})`;
+          ctx.lineWidth = 1;
+          ctx.fillRect(-d.size / 2, -d.size / 2, d.size, d.size);
+          ctx.strokeRect(-d.size / 2, -d.size / 2, d.size, d.size);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      // --- RENDER DUST CLOUDS ---
+      if (rad.dustClouds && rad.dustClouds.length > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        for (const c of rad.dustClouds) {
+          const cAlpha = Math.max(0, (1 - c.elapsed / c.life) * 0.22);
+          ctx.fillStyle = `rgba(240, 220, 160, ${cAlpha})`;
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // --- RENDER CELESTIAL STARS ---
+      if (rad.celestialStars && rad.celestialStars.length > 0) {
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        for (const s of rad.celestialStars) {
+          // Light trails behind launched stars
+          if (s.trail && s.trail.length > 1) {
+            for (let t = 0; t < s.trail.length - 1; t++) {
+              const tAlpha = (t / s.trail.length) * 0.7;
+              ctx.strokeStyle = `rgba(255, 220, 80, ${tAlpha})`;
+              ctx.lineWidth = 2 + (t / s.trail.length) * 3;
+              ctx.beginPath();
+              ctx.moveTo(s.trail[t].x, s.trail[t].y);
+              ctx.lineTo(s.trail[t + 1].x, s.trail[t + 1].y);
+              ctx.stroke();
+            }
+          }
+
+          // Glowing Golden Star Core
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 4-point golden star flare
+          ctx.strokeStyle = "rgba(255, 230, 100, 0.9)";
+          ctx.lineWidth = 2;
+          const flareLen = s.r * 2.2;
+          ctx.beginPath();
+          ctx.moveTo(s.x - flareLen, s.y); ctx.lineTo(s.x + flareLen, s.y);
+          ctx.moveTo(s.x, s.y - flareLen); ctx.lineTo(s.x, s.y + flareLen);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       // Draw Boss Entity
       if (!rad.defeated) {
         ctx.save();
         ctx.translate(bx, by);
 
-        // Outer Halo
-        ctx.shadowColor = "gold";
-        ctx.shadowBlur = 40;
-        ctx.fillStyle = "rgba(255, 255, 200, 0.2)";
+        // Outer Halo — no shadowBlur, use screen composite instead
+        ctx.fillStyle = "rgba(255, 255, 200, 0.18)";
         ctx.beginPath();
         ctx.arc(0, 0, 100 + Math.sin(now / 200) * 10, 0, Math.PI * 2);
         ctx.fill();
@@ -3086,9 +4485,7 @@ export default function Game({
           ctx.rotate((Math.PI * 2) / 12);
         }
 
-        // Core Body
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = "white";
+        // Core Body — no shadow
         ctx.fillStyle = "white";
         ctx.beginPath();
         ctx.arc(0, 0, 35, 0, Math.PI * 2);
@@ -3108,18 +4505,19 @@ export default function Game({
         ctx.restore();
 
         // Boss HUD
-        ctx.fillStyle = "gold";
+        const isEnraged = rad.hp <= 50;
+        ctx.fillStyle = isEnraged ? "#ff4444" : "gold";
         ctx.font = "bold 20px monospace";
         ctx.textAlign = "center";
-        ctx.fillText("RADIANCE", w / 2, 30);
+        ctx.fillText(isEnraged ? "THE RADIANCE — ENRAGED" : "RADIANCE", w / 2, 30);
 
         // Boss HP Bar
         ctx.fillStyle = "rgba(50, 0, 0, 0.5)";
         ctx.fillRect(w / 2 - 150, 45, 300, 15);
-        ctx.fillStyle = "rgba(255, 215, 0, 0.9)";
+        ctx.fillStyle = isEnraged ? "rgba(255, 68, 34, 0.95)" : "rgba(255, 215, 0, 0.9)";
         const hpRatio = rad.hp / 100;
         ctx.fillRect(w / 2 - 150, 45, 300 * hpRatio, 15);
-        ctx.strokeStyle = "white";
+        ctx.strokeStyle = isEnraged ? "#ff8866" : "white";
         ctx.lineWidth = 2;
         ctx.strokeRect(w / 2 - 150, 45, 300, 15);
 
@@ -3139,7 +4537,7 @@ export default function Game({
         }
       }
 
-      // Radiance Particles
+      // Radiance Ambient Particles & Sparks
       const rPart = radParticlesRef.current;
       ctx.save();
       ctx.globalCompositeOperation = "screen";
@@ -3147,47 +4545,55 @@ export default function Game({
         ctx.fillStyle = `rgba(255, 240, 150, ${pVar.opacity})`;
         ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI * 2); ctx.fill();
       }
+      // Sparks drawn without shadowBlur (already in "screen" composite = cheap glow)
       for (const pVar of rPart.sparks) {
         ctx.fillStyle = pVar.color;
-        ctx.shadowColor = pVar.color;
-        ctx.shadowBlur = 10;
         ctx.beginPath(); ctx.arc(pVar.x, pVar.y, pVar.r, 0, Math.PI * 2); ctx.fill();
       }
       for (const b of rPart.booms) {
         if (!b.delay || b.delay <= 0) {
           ctx.strokeStyle = `rgba(255, 255, 255, ${1 - b.elapsed / b.life})`;
           ctx.lineWidth = 15 * (1 - b.elapsed / b.life);
-          ctx.shadowColor = "white";
-          ctx.shadowBlur = 20;
           ctx.beginPath(); ctx.arc(bx, by, b.r, 0, Math.PI * 2); ctx.stroke();
         }
       }
       ctx.restore();
 
-      // Draw Attacks
+      // Legacy homing orbs — no shadow
       for (const orb of rad.homingOrbs) {
-        ctx.shadowColor = "gold";
-        ctx.shadowBlur = 15;
         ctx.fillStyle = "white";
         ctx.beginPath(); ctx.arc(orb.x, orb.y, orb.r, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = "gold"; ctx.lineWidth = 3; ctx.stroke();
-        ctx.shadowBlur = 0;
       }
 
+      // Wall Spikes — no shadowBlur
       for (const sp of rad.wallSpikes) {
         ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-        ctx.shadowColor = "gold"; ctx.shadowBlur = 15;
         if (sp.isVert) {
           if (sp.state === "WARN") {
-            ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+            const warnPulse = 0.22 + 0.18 * Math.sin(now / 90);
+            ctx.fillStyle = `rgba(255, 215, 0, ${warnPulse})`;
             ctx.fillRect(sp.x - sp.width / 2, 0, sp.width, h);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(sp.x, 0);
+            ctx.lineTo(sp.x, h);
+            ctx.stroke();
           } else {
             ctx.fillRect(sp.x - sp.width / 2, 0, sp.width, sp.length);
           }
         } else {
           if (sp.state === "WARN") {
-            ctx.fillStyle = "rgba(255, 215, 0, 0.3)";
+            const warnPulse = 0.22 + 0.18 * Math.sin(now / 90);
+            ctx.fillStyle = `rgba(255, 215, 0, ${warnPulse})`;
             ctx.fillRect(0, sp.y - sp.width / 2, w, sp.width);
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, sp.y);
+            ctx.lineTo(w, sp.y);
+            ctx.stroke();
           } else {
             ctx.fillRect(0, sp.y - sp.width / 2, sp.length, sp.width);
           }
@@ -3195,10 +4601,22 @@ export default function Game({
         ctx.shadowBlur = 0;
       }
 
+      // Lasers with clean pre-fire solid charge beam
       for (const L of rad.lasers) {
         if (L.elapsed < L.chargeTime) {
-          ctx.fillStyle = "rgba(255, 215, 0, 0.2)";
-          ctx.save(); ctx.translate(L.cx, L.cy); ctx.rotate(L.angle);
+          const chargeRatio = L.elapsed / L.chargeTime;
+          ctx.save();
+          ctx.translate(L.cx, L.cy);
+          ctx.rotate(L.angle);
+          // Pre-fire solid guide ray
+          ctx.strokeStyle = `rgba(255, 215, 0, ${0.3 + chargeRatio * 0.5})`;
+          ctx.lineWidth = 1.5 + chargeRatio * 2;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(L.length, 0);
+          ctx.stroke();
+          // Danger corridor
+          ctx.fillStyle = `rgba(255, 215, 0, ${0.04 + chargeRatio * 0.14})`;
           ctx.fillRect(0, -L.thick / 2, L.length, L.thick);
           ctx.restore();
         } else {
@@ -3212,6 +4630,138 @@ export default function Game({
           ctx.restore();
           ctx.shadowBlur = 0;
         }
+      }
+
+      // --- RENDER DIVINE SWORDS ---
+      if (rad.swordCascades && rad.swordCascades.length > 0) {
+        ctx.save();
+        for (const sc of rad.swordCascades) {
+          const curElapsed = (elapsedMs - sc.spawnedAtMs) / 1000;
+          if (curElapsed < sc.delay) continue;
+          const activeTime = curElapsed - sc.delay;
+
+          if (sc.state === "WARN") {
+            const warnRatio = Math.min(1, activeTime / sc.warnDuration);
+            const pulse = 0.4 + 0.6 * Math.sin(now / 70);
+
+            // Floor warning corridor
+            ctx.fillStyle = `rgba(255, 215, 0, ${0.08 + warnRatio * 0.15})`;
+            ctx.fillRect(sc.x - sc.width / 2, 0, sc.width, h);
+
+            // Thin vertical guide ray
+            ctx.strokeStyle = `rgba(255, 235, 120, ${0.4 + warnRatio * 0.5})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(sc.x, 0);
+            ctx.lineTo(sc.x, h);
+            ctx.stroke();
+
+            // Blade glyph at top
+            ctx.save();
+            ctx.translate(sc.x, 30);
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "gold";
+            ctx.shadowBlur = 15 * pulse;
+            ctx.beginPath();
+            ctx.moveTo(0, sc.height / 2);
+            ctx.lineTo(-sc.width / 2, -sc.height / 4);
+            ctx.lineTo(-sc.width / 4, -sc.height / 2);
+            ctx.lineTo(sc.width / 4, -sc.height / 2);
+            ctx.lineTo(sc.width / 2, -sc.height / 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = "rgba(255, 215, 0, 0.9)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.restore();
+          } else if (sc.state === "FALLING") {
+            ctx.save();
+            ctx.translate(sc.x, sc.y);
+
+            // Motion blur wake trail
+            const grad = ctx.createLinearGradient(0, -sc.height * 1.5, 0, sc.height / 2);
+            grad.addColorStop(0, "rgba(255, 215, 0, 0)");
+            grad.addColorStop(0.6, "rgba(255, 225, 100, 0.5)");
+            grad.addColorStop(1, "rgba(255, 255, 255, 0.95)");
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.moveTo(0, sc.height / 2 + 10);
+            ctx.lineTo(-sc.width / 2 - 2, -sc.height * 1.2);
+            ctx.lineTo(sc.width / 2 + 2, -sc.height * 1.2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Blade body
+            ctx.fillStyle = "#ffffff";
+            ctx.shadowColor = "gold";
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.moveTo(0, sc.height / 2);
+            ctx.lineTo(-sc.width / 2, -sc.height / 4);
+            ctx.lineTo(-sc.width / 4, -sc.height / 2);
+            ctx.lineTo(sc.width / 4, -sc.height / 2);
+            ctx.lineTo(sc.width / 2, -sc.height / 4);
+            ctx.closePath();
+            ctx.fill();
+
+            // Crossguard & golden trim
+            ctx.strokeStyle = "rgba(255, 220, 80, 1)";
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(-sc.width, -sc.height / 4);
+            ctx.lineTo(sc.width, -sc.height / 4);
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+        ctx.restore();
+      }
+
+      // --- RENDER SOLAR LIGHT PILLARS ---
+      if (rad.lightPillars && rad.lightPillars.length > 0) {
+        ctx.save();
+        for (const pil of rad.lightPillars) {
+          const curElapsed = (elapsedMs - pil.spawnedAtMs) / 1000;
+          if (pil.state === "WARN") {
+            const warnRatio = Math.min(1, curElapsed / pil.warnDuration);
+            const pulse = 0.5 + 0.5 * Math.sin(now / 80);
+            ctx.fillStyle = `rgba(255, 220, 80, ${0.12 + warnRatio * 0.25 * pulse})`;
+            ctx.fillRect(pil.x - pil.width / 2, 0, pil.width, h);
+
+            ctx.strokeStyle = `rgba(255, 235, 120, ${0.4 + warnRatio * 0.5})`;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(pil.x - pil.width / 2, 0); ctx.lineTo(pil.x - pil.width / 2, h);
+            ctx.moveTo(pil.x + pil.width / 2, 0); ctx.lineTo(pil.x + pil.width / 2, h);
+            ctx.stroke();
+
+            ctx.fillStyle = `rgba(255, 240, 150, ${0.4 + warnRatio * 0.5})`;
+            ctx.beginPath();
+            ctx.ellipse(pil.x, h - 30, pil.width / 2, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (pil.state === "ERUPT") {
+            const eruptElapsed = curElapsed - pil.warnDuration;
+            const eruptRatio = Math.min(1, Math.max(0, eruptElapsed / pil.eruptDuration));
+            const fade = Math.pow(1 - eruptRatio, 1.2);
+
+            ctx.globalCompositeOperation = "screen";
+
+            ctx.fillStyle = `rgba(255, 205, 50, ${fade * 0.6})`;
+            ctx.fillRect(pil.x - (pil.width * 1.5) / 2, 0, pil.width * 1.5, h);
+
+            ctx.fillStyle = `rgba(255, 255, 255, ${fade * 0.95})`;
+            ctx.shadowColor = "gold";
+            ctx.shadowBlur = 30 * fade;
+            ctx.fillRect(pil.x - pil.width / 2, 0, pil.width, h);
+
+            ctx.fillStyle = `rgba(255, 240, 180, ${fade})`;
+            ctx.beginPath();
+            ctx.ellipse(pil.x, h - 30, pil.width * 0.9, 18, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
       }
 
       // Collectible Radiant Orbs
@@ -3851,10 +5401,9 @@ export default function Game({
       ctx.shadowBlur = 0;
     }
 
-    if (phaseRef.current === PHASE.PLAYING) {
-      if (!document.hidden) {
-        rafRef.current = requestAnimationFrame(loop);
-      }
+    } catch (err) {
+      // Swallow errors so a single bad frame never kills the loop
+      console.error("[GameLoop] Frame error (skipped):", err);
     }
   }
 

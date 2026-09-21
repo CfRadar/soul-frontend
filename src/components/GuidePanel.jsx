@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { RANKS } from "../ui/ranks";// Helper components for the visual cards
 const Card = ({ children, title, className = "" }) => (
   <div className={`border border-white/40 bg-black/50 p-4 rounded-xl ${className}`}>
@@ -413,8 +413,8 @@ export default function GuidePanel({ open, onClose }) {
                   <li className="flex gap-4 items-start">
                      <span className="text-lg">💨</span>
                      <div>
-                       <strong className="text-sm">OFFENSIVE DASHING</strong>
-                       <p className="text-xs opacity-70 mt-1">Dashing provides instant distance and speed. Use it to aggressively pierce through thin laser walls, but remember it does NOT grant i-frames.</p>
+                       <strong className="text-sm">EVASIVE DASH (I-FRAMES!)</strong>
+                       <p className="text-xs opacity-70 mt-1">Dashing provides instant distance and speed. Use it to phase through Radiance's missile laser strikes, undying vortexes, or sweeping lasers. 1.7s cooldown.</p>
                      </div>
                   </li>
                   <li className="flex gap-4 items-start">
@@ -435,3 +435,4 @@ export default function GuidePanel({ open, onClose }) {
     </div>
   );
 }
+

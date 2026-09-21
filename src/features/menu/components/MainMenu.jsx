@@ -24,9 +24,9 @@ export function MainMenu({
   const winrate = totalGames > 0 ? Math.round(((me?.wins || 0) / totalGames) * 100) : 0;
 
   return (
-    <div className="w-full h-full min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4">
+    <div className="w-full h-auto lg:h-full lg:min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-3 md:gap-4 pb-8 lg:pb-0">
       {/* Left Column: Player Status Tile + 5 Action Tiles */}
-      <div className="lg:col-span-7 xl:col-span-8 h-full min-h-0 flex flex-col gap-3 md:gap-4">
+      <div className="lg:col-span-7 xl:col-span-8 h-auto lg:h-full lg:min-h-0 flex flex-col gap-3 md:gap-4">
         {/* Bento Tile 1: Player Soul Status & Narrator Dialogue */}
         <div className="undertale-box p-3.5 md:p-4 flex-shrink-0 flex flex-col justify-between">
           <div className="flex items-start sm:items-center justify-between gap-3">
@@ -37,8 +37,9 @@ export function MainMenu({
                   {safeUsername(me.username)}
                 </span>
                 <button
+                  type="button"
                   onClick={onOpenUsernameModal}
-                  className="font-pixel text-[9px] text-neutral-400 hover:text-white underline cursor-pointer ml-1 flex-shrink-0"
+                  className="font-pixel text-[9px] text-neutral-400 hover:text-white underline cursor-pointer ml-1 flex-shrink-0 touch-manipulation"
                 >
                   [RENAME]
                 </button>
@@ -59,13 +60,14 @@ export function MainMenu({
         </div>
 
         {/* Bento Tiles 2-6: 5 Action Commands Grid */}
-        <div className="flex-1 min-h-0 grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 grid-rows-[1fr_1fr_auto]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 lg:flex-1 lg:min-h-0 lg:grid-rows-[1fr_1fr_auto]">
           {/* Tile 2: FIGHT (Orange) */}
           <button
+            type="button"
             onClick={onStartRanked}
             onMouseEnter={() => setHoveredBtn("fight")}
             onMouseLeave={() => setHoveredBtn(null)}
-            className="undertale-box-orange p-3.5 md:p-4 text-left transition-all group hover:bg-[#ff9900]/10 flex flex-col justify-between cursor-pointer"
+            className="undertale-box-orange p-3.5 md:p-4 text-left transition-all group hover:bg-[#ff9900]/10 flex flex-col justify-between cursor-pointer min-h-[85px] sm:min-h-[95px] active:scale-[0.98] touch-manipulation"
           >
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
@@ -89,10 +91,11 @@ export function MainMenu({
 
           {/* Tile 3: ACT (Cyan) */}
           <button
+            type="button"
             onClick={onStartFriendMatch}
             onMouseEnter={() => setHoveredBtn("act")}
             onMouseLeave={() => setHoveredBtn(null)}
-            className="undertale-box-cyan p-3.5 md:p-4 text-left transition-all group hover:bg-[#00ffff]/10 flex flex-col justify-between cursor-pointer"
+            className="undertale-box-cyan p-3.5 md:p-4 text-left transition-all group hover:bg-[#00ffff]/10 flex flex-col justify-between cursor-pointer min-h-[85px] sm:min-h-[95px] active:scale-[0.98] touch-manipulation"
           >
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
@@ -116,10 +119,11 @@ export function MainMenu({
 
           {/* Tile 4: SURVIVE (Yellow) */}
           <button
+            type="button"
             onClick={onStartTimeTrial}
             onMouseEnter={() => setHoveredBtn("survive")}
             onMouseLeave={() => setHoveredBtn(null)}
-            className="undertale-box-yellow p-3.5 md:p-4 text-left transition-all group hover:bg-[#ffff00]/10 flex flex-col justify-between cursor-pointer"
+            className="undertale-box-yellow p-3.5 md:p-4 text-left transition-all group hover:bg-[#ffff00]/10 flex flex-col justify-between cursor-pointer min-h-[85px] sm:min-h-[95px] active:scale-[0.98] touch-manipulation"
           >
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
@@ -143,10 +147,11 @@ export function MainMenu({
 
           {/* Tile 5: SOULS (Green) */}
           <button
+            type="button"
             onClick={onOpenFriends}
             onMouseEnter={() => setHoveredBtn("friends")}
             onMouseLeave={() => setHoveredBtn(null)}
-            className="undertale-box-green p-3.5 md:p-4 text-left transition-all group hover:bg-[#00ff00]/10 flex flex-col justify-between cursor-pointer"
+            className="undertale-box-green p-3.5 md:p-4 text-left transition-all group hover:bg-[#00ff00]/10 flex flex-col justify-between cursor-pointer min-h-[85px] sm:min-h-[95px] active:scale-[0.98] touch-manipulation"
           >
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
@@ -170,10 +175,11 @@ export function MainMenu({
 
           {/* Tile 6: BOSS RUSH (Purple, full width of action grid) */}
           <button
+            type="button"
             onClick={onOpenBosses}
             onMouseEnter={() => setHoveredBtn("bosses")}
             onMouseLeave={() => setHoveredBtn(null)}
-            className="sm:col-span-2 undertale-box-purple p-3 md:p-3.5 text-left transition-all group hover:bg-[#e0aaff]/10 flex items-center justify-between cursor-pointer flex-shrink-0"
+            className="sm:col-span-2 undertale-box-purple p-3 md:p-3.5 text-left transition-all group hover:bg-[#e0aaff]/10 flex items-center justify-between cursor-pointer flex-shrink-0 min-h-[58px] active:scale-[0.98] touch-manipulation"
           >
             <div className="flex items-center gap-2.5">
               <span className={`text-[#ff0000] text-sm flex-shrink-0 transition-opacity ${hoveredBtn === "bosses" ? "opacity-100 animate-heartbeat" : "opacity-0"}`}>
@@ -193,7 +199,7 @@ export function MainMenu({
       </div>
 
       {/* Right Column: Leaderboard Bento Tile */}
-      <div className="lg:col-span-5 xl:col-span-4 h-full min-h-0 flex flex-col">
+      <div className="lg:col-span-5 xl:col-span-4 h-[460px] lg:h-full lg:min-h-0 flex flex-col">
         {leaderboardSlot}
       </div>
     </div>

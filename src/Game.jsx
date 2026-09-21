@@ -1,9 +1,10 @@
 // client/src/Game.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "./socket";
 import { submitTimeTrial, unlockBoss } from "./api";
 import RankBadge from "./ui/RankBadge";
 import RankChangeToast from "./ui/RankChangeToast";
+import MobileControls, { LandscapePrompt } from "./components/MobileControls";
 import radianceMusicAsset from "../assets/music/RadiantBossFight.mp3";
 import goddessMusicAsset from "../assets/music/GoddessBossFight.mp3";
 
@@ -100,15 +101,21 @@ function safeUsername(username) {
 }
 
 // Safe enemy identification
-function getEnemyInfo({ p1, p2, me }) {
+function getEnemyInfo({ p1, p2, me, currentSocketId }) {
+  const mySockId = currentSocketId || socket?.id;
   const meUid = me?.uid;
   const left = p1 || null;
   const right = p2 || null;
 
   let enemy = null;
-  if (meUid && left?.uid === meUid) {
+  // 1. Match by unique socketId first (vital when testing 2 windows with same login)
+  if (mySockId && left?.socketId === mySockId) {
     enemy = right;
-  } else if (meUid && right?.uid === meUid) {
+  } else if (mySockId && right?.socketId === mySockId) {
+    enemy = left;
+  } else if (meUid && left?.uid === meUid && right?.uid !== meUid) {
+    enemy = right;
+  } else if (meUid && right?.uid === meUid && left?.uid !== meUid) {
     enemy = left;
   } else {
     enemy = right || left;
@@ -123,17 +130,22 @@ function getEnemyInfo({ p1, p2, me }) {
 }
 
 // Helper to get opponent name safely
-function getOpponentName(me, matchInfo) {
+function getOpponentName(me, matchInfo, currentSocketId) {
+  const mySockId = currentSocketId || socket?.id;
   const meUid = me?.uid;
   const p1 = matchInfo?.p1;
   const p2 = matchInfo?.p2;
 
-  // Prefer p2.username if I am p1
-  if (meUid && p1?.uid === meUid) {
+  if (mySockId && p1?.socketId === mySockId) {
     return safeUsername(p2?.username) || "OPPONENT";
   }
-  // Prefer p1.username if I am p2
-  if (meUid && p2?.uid === meUid) {
+  if (mySockId && p2?.socketId === mySockId) {
+    return safeUsername(p1?.username) || "OPPONENT";
+  }
+  if (meUid && p1?.uid === meUid && p2?.uid !== meUid) {
+    return safeUsername(p2?.username) || "OPPONENT";
+  }
+  if (meUid && p2?.uid === meUid && p1?.uid !== meUid) {
     return safeUsername(p1?.username) || "OPPONENT";
   }
   // Fallback: prefer p2, then p1
@@ -181,7 +193,8 @@ function HeaderBar({
   timerText,
   hpHitPulse, enemyHitFlash, enemyHpPulse, enemyHealFlash,
   phase, guardStatus, corruptHealRem,
-  isCompetitive, isStandaloneSans
+  isCompetitive, isStandaloneSans,
+  onExit,
 }) {
   const showBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
 
@@ -191,22 +204,22 @@ function HeaderBar({
   const showEnemyHp = isCompetitive || isStandaloneSans;
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 border-b-4 border-white bg-black min-h-[56px] font-pixel">
+    <div className="flex items-center justify-between px-2 sm:px-4 py-1 sm:py-2 border-b-2 sm:border-b-4 border-white bg-black min-h-[42px] sm:min-h-[56px] font-pixel">
       {/* Left: Names */}
-      <div className="w-[30%] min-w-0 flex items-center gap-2">
-        <span className="text-[#ff0000] text-xs animate-heartbeat">❤️</span>
-        <span className="text-xs text-white truncate uppercase tracking-wide">
+      <div className="w-[30%] min-w-0 flex items-center gap-1.5 sm:gap-2">
+        <span className="text-[#ff0000] text-[10px] sm:text-xs animate-heartbeat">❤️</span>
+        <span className="text-[10px] sm:text-xs text-white truncate uppercase tracking-wide">
           {myName}
         </span>
-        <span className="mx-1 text-neutral-500 text-xs">VS</span>
-        <span className="text-xs text-neutral-400 truncate uppercase tracking-wide">
+        <span className="mx-0.5 sm:mx-1 text-neutral-500 text-[9px] sm:text-xs">VS</span>
+        <span className="text-[10px] sm:text-xs text-neutral-400 truncate uppercase tracking-wide">
           {oppName}
         </span>
       </div>
 
       {/* Center: Timer */}
       <div className="w-[32%] flex justify-center">
-        <span className={`text-2xl text-white tabular-nums tracking-widest ${phase === PHASE.PLAYING ? 'text-[#ffff00]' : 'text-white'}`}>
+        <span className={`text-lg sm:text-2xl text-white tabular-nums tracking-widest ${phase === PHASE.PLAYING ? 'text-[#ffff00]' : 'text-white'}`}>
           {timerText}
         </span>
       </div>
@@ -251,6 +264,17 @@ function HeaderBar({
             </span>
           </div>
         </div>
+
+        {/* Exit match button */}
+        {onExit && (
+          <button
+            onClick={onExit}
+            className="text-[9px] sm:text-[10px] border border-[#ffff00] text-[#ffff00] hover:bg-[#ffff00] hover:text-black px-2 py-1 transition cursor-pointer flex-shrink-0 font-pixel active:scale-95"
+            title="Leave Match and return to Menu"
+          >
+            [ EXIT ]
+          </button>
+        )}
       </div>
     </div>
   );
@@ -262,6 +286,7 @@ export default function Game({
   mode = "ranked",
   bossId = null,
   friendTargetUid = null,
+  initialMatchData = null,
   onExit,
   onBack,
   onMeUpdate,
@@ -269,6 +294,64 @@ export default function Game({
   const canvasRef = useRef(null);
   const rafRef = useRef(0);
   const keysRef = useRef(new Set());
+
+  // ── Mobile touch controls ──────────────────────────────────────────────────
+  // joystickInputRef: { ax: -1..1, ay: -1..1 } written by the virtual joystick
+  const joystickInputRef = useRef({ ax: 0, ay: 0 });
+  // pendingMobileTriggerRef: buffered button taps from touch buttons
+  const pendingMobileTriggerRef = useRef({ dash: false, guard: false, special: false });
+  // Focus / Slow-Mo precision dodging ref (50% speed)
+  const focusActiveRef = useRef(false);
+  // Detect touch device (used to show/hide mobile controls overlay)
+  const [isTouchDevice] = useState(() =>
+    typeof window !== "undefined" &&
+    ("ontouchstart" in window ||
+      navigator.maxTouchPoints > 0 ||
+      window.matchMedia?.("(pointer: coarse)")?.matches)
+  );
+  // Active touch controls toggle (auto-enables on touch or screens <= 950px)
+  const [showTouchControls, setShowTouchControls] = useState(() =>
+    typeof window !== "undefined" &&
+    ("ontouchstart" in window ||
+      navigator.maxTouchPoints > 0 ||
+      window.matchMedia?.("(pointer: coarse)")?.matches ||
+      window.innerWidth <= 950)
+  );
+  // Orientation tracking: landscape vs portrait
+  const [isPortrait, setIsPortrait] = useState(() =>
+    typeof window !== "undefined" ? window.innerHeight > window.innerWidth : false
+  );
+  const [dismissPortraitPrompt, setDismissPortraitPrompt] = useState(false);
+  // Mobile HUD refresh state – tick every 100ms so button readiness and cooldowns update visually
+  const [mobileTick, setMobileTick] = useState(0);
+
+  useEffect(() => {
+    const handleOrientation = () => {
+      if (typeof window === "undefined") return;
+      setIsPortrait(window.innerHeight > window.innerWidth);
+      if (
+        "ontouchstart" in window ||
+        navigator.maxTouchPoints > 0 ||
+        window.matchMedia?.("(pointer: coarse)")?.matches ||
+        window.innerWidth <= 950
+      ) {
+        setShowTouchControls(true);
+      }
+    };
+    window.addEventListener("resize", handleOrientation);
+    window.addEventListener("orientationchange", handleOrientation);
+    return () => {
+      window.removeEventListener("resize", handleOrientation);
+      window.removeEventListener("orientationchange", handleOrientation);
+    };
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMobileTick((t) => (t + 1) % 10000);
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
 
   const lastHitAtRef = useRef(-9999);
   const phaseRef = useRef(PHASE.MENU);
@@ -536,6 +619,20 @@ export default function Game({
   const shakeRef = useRef({ until: 0, amp: 0 });
   const dashRef = useRef({ active: false, until: 0, cooldownUntil: 0, dirX: 0, dirY: 0 });
   const playerTrailRef = useRef([]);
+  const opponentSoulRef = useRef({
+    currentX: 490,
+    currentY: 270,
+    targetX: 490,
+    targetY: 270,
+    isDashing: false,
+    isGuarding: false,
+    isHealing: false,
+    hitFlashUntil: 0,
+    lastUpdate: 0,
+    initialized: false,
+    trail: [],
+    hp: 100,
+  });
 
   const maxHpRef = useRef(100);
   const radianceBossRef = useRef({
@@ -636,7 +733,7 @@ export default function Game({
       bossId === "boss_sans" ? "JUDGEMENT WRAITH" : 
       bossId === "boss_goddess" ? "THE ASCENDED BLADE" :
       bossId === "boss_radiance" ? "RADIANT ASCENDANT" : "BOSS ENTITY"
-    ) : getOpponentName(me, matchInfo);
+    ) : getOpponentName(me, matchInfo, myId || socket.id);
 
   // Compute timer text - use frozen endAt timestamp if match has ended
   const shouldShowTimer = phase === PHASE.PLAYING || phase === PHASE.MATCH_OVER || phase === PHASE.SUMMARY;
@@ -676,6 +773,16 @@ export default function Game({
   useEffect(() => {
     seedRef.current = seed;
   }, [seed]);
+
+  const modeRef = useRef(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
+  const opponentNameRef = useRef(opponentName);
+  useEffect(() => {
+    opponentNameRef.current = opponentName;
+  }, [opponentName]);
 
   // Update now only during PLAYING phase to avoid unnecessary rerenders when match is frozen
   useEffect(() => {
@@ -1077,6 +1184,78 @@ export default function Game({
     shakeRef.current.until = Math.max(shakeRef.current.until, now + ms);
   }
 
+  const triggerSpecialAction = () => {
+    if (phaseRef.current !== PHASE.PLAYING) return;
+    const rad = radianceBossRef.current;
+    const god = goddessBossRef.current;
+
+    if (rad.active && rad.orbCharge >= rad.orbChargeMax) {
+      rad.orbCharge = 0;
+      rad.collectibleOrb = null;
+      rad.sonicBoomActive = true;
+      rad.sonicBoomUntil = Date.now() + 500;
+      rad.hp = Math.max(0, rad.hp - 20);
+      addShake(20, 600);
+      playLaserFireSound();
+
+      // Spawn boom visuals
+      radParticlesRef.current.booms.push({ r: 10, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600), life: 0.5, elapsed: 0 });
+      radParticlesRef.current.booms.push({ r: 5, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600) * 0.8, life: 0.6, elapsed: 0, delay: 0.1 });
+
+      // Spawn boss hit sparks
+      const bx = (window.innerWidth || 900) / 2;
+      const by = 120;
+      for (let i = 0; i < 30; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 200 + Math.random() * 400;
+        radParticlesRef.current.sparks.push({
+          x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+          life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
+          color: Math.random() > 0.5 ? "white" : "gold"
+        });
+      }
+
+      // DISPEL PERSISTENT UNDYING ATTACKS!
+      if (rad.undyingStalker || (rad.undyingVortexes && rad.undyingVortexes.length > 0)) {
+        playUndyingShatterSound();
+        rad.undyingStalker = null;
+        rad.undyingVortexes = [];
+        healTextRef.current = { text: "⚡ UNDYING ATTACK DISPELLED! ⚡", until: Date.now() + 2500 };
+        setHpPulse(true);
+        setTimeout(() => setHpPulse(false), 300);
+      }
+      return;
+    }
+
+    if (god.active && god.orbCharge >= god.orbChargeMax) {
+      god.orbCharge = 0;
+      god.collectibleOrb = null;
+      god.hp = Math.max(0, god.hp - 20);
+      const currentElapsed = Date.now() - surviveStartRef.current;
+      god.staggeredUntilMs = currentElapsed + 3500;
+
+      addShake(30, 800);
+      playLaserFireSound();
+
+      radParticlesRef.current.booms.push({ r: 10, maxR: 1200, life: 0.6, elapsed: 0 });
+
+      for (let i = 0; i < 30; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 200 + Math.random() * 400;
+        radParticlesRef.current.sparks.push({
+          x: god.x, y: god.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+          life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
+          color: "white"
+        });
+      }
+      return;
+    }
+
+    // Default fallback (Ranked / Multiplayer / Survival): Focus mode (precision slow-mo)
+    focusActiveRef.current = !focusActiveRef.current;
+    addShake(2, 60);
+  };
+
   // keyboard
   useEffect(() => {
     const down = (e) => {
@@ -1102,74 +1281,7 @@ export default function Game({
 
       // Sonic Boom / Shockwave activation (r)
       if (k === "r" && !e.repeat) {
-        if (phaseRef.current === PHASE.PLAYING) {
-           const rad = radianceBossRef.current;
-           const god = goddessBossRef.current;
-           
-           if (rad.active && rad.orbCharge >= rad.orbChargeMax) {
-              rad.orbCharge = 0;
-              rad.collectibleOrb = null;
-              rad.sonicBoomActive = true;
-              rad.sonicBoomUntil = Date.now() + 500;
-              rad.hp = Math.max(0, rad.hp - 20);
-              addShake(20, 600);
-              playLaserFireSound();
-    
-              // Spawn boom visuals
-              radParticlesRef.current.booms.push({ r: 10, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600), life: 0.5, elapsed: 0 });
-              radParticlesRef.current.booms.push({ r: 5, maxR: Math.max(window.innerWidth || 900, window.innerHeight || 600) * 0.8, life: 0.6, elapsed: 0, delay: 0.1 });
-    
-              // Spawn boss hit sparks
-              const bx = (window.innerWidth || 900) / 2;
-              const by = 120;
-              for (let i = 0; i < 30; i++) {
-                const ang = Math.random() * Math.PI * 2;
-                const spd = 200 + Math.random() * 400;
-                radParticlesRef.current.sparks.push({
-                  x: bx, y: by, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
-                  life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
-                  color: Math.random() > 0.5 ? "white" : "gold"
-                });
-              }
-
-              // DISPEL PERSISTENT UNDYING ATTACKS!
-              if (rad.undyingStalker || (rad.undyingVortexes && rad.undyingVortexes.length > 0)) {
-                playUndyingShatterSound();
-                rad.undyingStalker = null;
-                rad.undyingVortexes = [];
-                healTextRef.current = { text: "⚡ UNDYING ATTACK DISPELLED! ⚡", until: Date.now() + 2500 };
-                setHpPulse(true);
-                setTimeout(() => setHpPulse(false), 300);
-              }
-           }
-           
-           if (god.active && god.orbCharge >= god.orbChargeMax) {
-              god.orbCharge = 0;
-              god.collectibleOrb = null;
-              god.hp = Math.max(0, god.hp - 20);
-              // Calculate elapsedMs manually for timeline synchronization
-              const currentElapsed = Date.now() - surviveStartRef.current;
-              // Stagger boss natively for 3 seconds of timeline
-              god.staggeredUntilMs = currentElapsed + 3500;
-              
-              addShake(30, 800);
-              playLaserFireSound();
-              
-              // Emit massive blood-red boom visual natively from player
-              radParticlesRef.current.booms.push({ r: 10, maxR: 1200, life: 0.6, elapsed: 0 });
-              
-              // Spark particles around boss
-              for (let i = 0; i < 30; i++) {
-                const ang = Math.random() * Math.PI * 2;
-                const spd = 200 + Math.random() * 400;
-                radParticlesRef.current.sparks.push({
-                  x: god.x, y: god.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
-                  life: 0.3 + Math.random() * 0.4, elapsed: 0, r: 2 + Math.random() * 3,
-                  color: "white" // Flashing white
-                });
-              }
-            }
-         }
+        triggerSpecialAction();
       }
 
       keysRef.current.add(k);
@@ -1225,8 +1337,8 @@ export default function Game({
         // Safely set matchInfo with optional chaining
         setMatchInfo({ mode: mode || "ranked", p1: p1 || null, p2: p2 || null });
 
-        // Safe enemy identification
-        const { enemyName: enemy, enemySocketId: eSocketId } = getEnemyInfo({ p1, p2, me });
+        // Safe enemy identification - use socket.id for precise disambiguation
+        const { enemyName: enemy, enemySocketId: eSocketId } = getEnemyInfo({ p1, p2, me, currentSocketId: socket.id });
         setEnemyName(enemy);
         setEnemySocketId(eSocketId);
         setEnemyHp(100);
@@ -1282,7 +1394,9 @@ export default function Game({
 
         // Update enemy HP if this is the enemy
         if (socketId === enemySocketId) {
+          opponentSoulRef.current.hp = newHp;
           if (newHp < prevEnemyHpRef.current) {
+            opponentSoulRef.current.hitFlashUntil = Date.now() + 200;
             setEnemyHitFlash(true);
             setEnemyHpPulse(true);
             setTimeout(() => setEnemyHitFlash(false), 150);
@@ -1419,6 +1533,32 @@ export default function Game({
     };
   }, [enemySocketId]);
 
+  // --- Dedicated stable listener for opponent real-time position (always mounted) ---
+  useEffect(() => {
+    const onOpponentPosition = (data) => {
+      try {
+        if (!data) return;
+        const { x, y, isDashing, isGuarding, isHealing } = data;
+        const opp = opponentSoulRef.current;
+        if (!opp.initialized) {
+          opp.currentX = x;
+          opp.currentY = y;
+          opp.initialized = true;
+        }
+        opp.targetX = x;
+        opp.targetY = y;
+        opp.isDashing = !!isDashing;
+        opp.isGuarding = !!isGuarding;
+        opp.isHealing = !!isHealing;
+        opp.lastUpdate = Date.now();
+      } catch (err) {
+        console.error("[game:opponentPosition] error:", err);
+      }
+    };
+    socket.on("game:opponentPosition", onOpponentPosition);
+    return () => socket.off("game:opponentPosition", onOpponentPosition);
+  }, []);
+
   // --- Broadcast local HP changes to opponent ---
   useEffect(() => {
     const isCompetitive = mode === "ranked" || mode === "friend";
@@ -1426,6 +1566,40 @@ export default function Game({
       socket.emit("game:hpUpdate", { roomId: roomIdRef.current, hp, maxHp: maxHpRef.current });
     }
   }, [hp, phase, mode]);
+
+  // --- Immediate match initialization when initialMatchData prop is provided ---
+  useEffect(() => {
+    if (initialMatchData?.roomId && phase === PHASE.MENU) {
+      try {
+        console.log("[Game] Initializing from initialMatchData:", initialMatchData);
+        const { roomId: rId, startAt: sAt, seed: sSeed, mode: mMode, p1, p2 } = initialMatchData;
+
+        lastResultRef.current = null;
+        setRoomId(rId);
+        setStartAt(sAt);
+        if (typeof sSeed === "number") setSeed(sSeed);
+
+        setMatchInfo({ mode: mMode || mode || "friend", p1: p1 || null, p2: p2 || null });
+
+        const { enemyName: enemy, enemySocketId: eSocketId } = getEnemyInfo({ p1, p2, me, currentSocketId: socket.id });
+        setEnemyName(enemy);
+        setEnemySocketId(eSocketId);
+        setEnemyHp(100);
+        prevHpRef.current = 100;
+
+        setWinnerId(null);
+        phaseRef.current = PHASE.MATCH_FOUND;
+        setPhase(PHASE.MATCH_FOUND);
+
+        setTimeout(() => {
+          phaseRef.current = PHASE.COUNTDOWN;
+          setPhase(PHASE.COUNTDOWN);
+        }, 900);
+      } catch (err) {
+        console.error("[Game] initialMatchData init error:", err);
+      }
+    }
+  }, [initialMatchData]);
 
   // --- Time Trial / Boss immediate start ---
   useEffect(() => {
@@ -1588,10 +1762,24 @@ export default function Game({
     };
 
     const c = canvasRef.current;
-    const w = c?.width || 900;
-    const h = c?.height || 520;
+    const w = c?.width || 980;
+    const h = c?.height || 540;
 
     playerRef.current = { x: w / 2, y: h / 2, r: 10 };
+    opponentSoulRef.current = {
+      currentX: w / 2,
+      currentY: h / 2,
+      targetX: w / 2,
+      targetY: h / 2,
+      isDashing: false,
+      isGuarding: false,
+      isHealing: false,
+      hitFlashUntil: 0,
+      lastUpdate: 0,
+      initialized: false,
+      trail: [],
+      hp: 100,
+    };
   }
 
   function beginMatch(serverStartAt, seedValue) {
@@ -1713,16 +1901,70 @@ export default function Game({
     }
   }
 
-  // Handle visibility return: pause rAF when hidden, resume cleanly on return
+  // Web Worker ticker: ensures the game loop and simulation NEVER pause when minimized or tabbed out
+  useEffect(() => {
+    let worker = null;
+    let workerUrl = null;
+
+    try {
+      const workerBlob = new Blob([
+        `
+        let timer = null;
+        self.onmessage = function(e) {
+          if (e.data === 'start') {
+            if (!timer) {
+              timer = setInterval(function() {
+                self.postMessage('tick');
+              }, 1000 / 60);
+            }
+          } else if (e.data === 'stop') {
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+          }
+        };
+        `
+      ], { type: 'application/javascript' });
+
+      workerUrl = URL.createObjectURL(workerBlob);
+      worker = new Worker(workerUrl);
+
+      worker.onmessage = (e) => {
+        if (e.data === 'tick') {
+          // When page is minimized/hidden, browser suspends rAF.
+          // The background worker drives the physics and damage simulation so the game NEVER freezes!
+          if (document.hidden && phaseRef.current === PHASE.PLAYING) {
+            loop(true);
+          }
+        }
+      };
+
+      if (phase === PHASE.PLAYING) {
+        worker.postMessage('start');
+      }
+    } catch (err) {
+      console.warn("[Game] Web Worker background ticker unavailable:", err);
+    }
+
+    return () => {
+      if (worker) {
+        worker.postMessage('stop');
+        worker.terminate();
+      }
+      if (workerUrl) {
+        URL.revokeObjectURL(workerUrl);
+      }
+    };
+  }, [phase]);
+
+  // Handle visibility change: instantly resume rAF when user returns to tab
   useEffect(() => {
     const handleVisChange = () => {
-      if (!document.hidden) {
-        // Returned to focus: reset _lastNow so dt isn't a huge spike, restart rAF
-        // On focus return: reset _lastNow so we don't get a massive dt spike
-        loop._lastNow = Date.now();
+      if (!document.hidden && phaseRef.current === PHASE.PLAYING) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(() => loop(false));
       }
-      // Do NOT stop rAF on hide — let the browser throttle it naturally.
-      // The loop reschedules itself at the top, so it keeps going regardless.
     };
     document.addEventListener("visibilitychange", handleVisChange);
     return () => {
@@ -1730,7 +1972,7 @@ export default function Game({
     };
   }, []);
 
-  // Watchdog: if the loop stalls for > 2s while playing, restart it
+  // Watchdog: if the loop stalls while playing, restart it
   useEffect(() => {
     const watchdog = setInterval(() => {
       if (phaseRef.current !== PHASE.PLAYING) return;
@@ -1738,8 +1980,12 @@ export default function Game({
       if (Date.now() - lastTick > 2000) {
         console.warn("[GameLoop] Watchdog detected stall – restarting loop");
         loop._lastNow = Date.now();
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = requestAnimationFrame(loop);
+        if (!document.hidden) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = requestAnimationFrame(() => loop(false));
+        } else {
+          loop(true);
+        }
       }
     }, 1000);
     return () => clearInterval(watchdog);
@@ -2172,12 +2418,12 @@ export default function Game({
     }
   }
 
-  function loop() {
+  function loop(isBackground = false) {
     // ── SCHEDULE NEXT FRAME FIRST ──────────────────────────────────────────
-    // This must come before ANY early-return so the loop can never die due to
-    // a null canvas, a thrown error, or any other guard condition.
-    if (phaseRef.current === PHASE.PLAYING) {
-      rafRef.current = requestAnimationFrame(loop);
+    // When visible and playing, queue next rAF.
+    // In background/minimized mode, the Web Worker drives the loop at 60Hz.
+    if (!isBackground && phaseRef.current === PHASE.PLAYING) {
+      rafRef.current = requestAnimationFrame(() => loop(false));
     }
     loop._lastTickMs = Date.now(); // for watchdog
 
@@ -2190,8 +2436,13 @@ export default function Game({
 
     const now = Date.now();
     const prevNow = loop._lastNow ?? now;
-    const dt = Math.min(0.05, (now - prevNow) / 1000);
+    const dt = Math.min(0.05, Math.max(0.001, (now - prevNow) / 1000));
     loop._lastNow = now;
+
+    // When minimized/hidden, release keys so the character stays stationary
+    if (isBackground) {
+      keysRef.current.clear();
+    }
 
     const radState = radianceBossRef.current;
     const timeDilation = (radState && radState.active && radState.timeDilation !== undefined) ? radState.timeDilation : 1.0;
@@ -2207,11 +2458,41 @@ export default function Game({
     if (keys.has("a") || keys.has("arrowleft")) ax -= 1;
     if (keys.has("d") || keys.has("arrowright")) ax += 1;
 
-    const len = Math.hypot(ax, ay) || 1;
-    ax /= len;
-    ay /= len;
+    // Blend with virtual joystick input from touchscreen (analog float -1..1)
+    const jx = joystickInputRef.current?.ax || 0;
+    const jy = joystickInputRef.current?.ay || 0;
+    if (jx !== 0 || jy !== 0) {
+      ax += jx;
+      ay += jy;
+    }
 
-    const speed = 260; // Base speed, slow removed
+    const len = Math.hypot(ax, ay);
+    if (len > 1) {
+      ax /= len;
+      ay /= len;
+    }
+
+    // Process buffered mobile action button taps
+    if (pendingMobileTriggerRef.current.guard) {
+      pendingMobileTriggerRef.current.guard = false;
+      if (isGuardReady(now)) {
+        guardUntilRef.current = now + 1000;
+        guardCdUntilRef.current = now + 5000;
+        addShake(4, 80);
+      }
+    }
+
+    if (pendingMobileTriggerRef.current.special) {
+      pendingMobileTriggerRef.current.special = false;
+      triggerSpecialAction();
+    }
+
+    const wantMobileDash = pendingMobileTriggerRef.current.dash;
+    if (wantMobileDash) {
+      pendingMobileTriggerRef.current.dash = false;
+    }
+
+    const speed = focusActiveRef.current ? 135 : 260; // 50% speed during Focus mode
 
     const p = playerRef.current;
     
@@ -2220,7 +2501,7 @@ export default function Game({
     const DASH_SPEED = 900;
     const DASH_COOLDOWN = 1750; // Balanced cooldown for deliberate boss dodging
     
-    if (keys.has("shift") && !dashRef.current.active && now > dashRef.current.cooldownUntil) {
+    if ((keys.has("shift") || wantMobileDash) && !dashRef.current.active && now > dashRef.current.cooldownUntil) {
        // Determine Dash Direction
        let dx = ax;
        let dy = ay;
@@ -2276,6 +2557,46 @@ export default function Game({
        tr.lifeMs -= dt * 1000;
        if (tr.lifeMs <= 0) playerTrailRef.current.splice(i, 1);
     }
+
+    // ── MULTIPLAYER REAL-TIME POSITION SYNC ──────────────────────────────────
+    const isMultiplayer = modeRef.current === "ranked" || modeRef.current === "friend";
+    if (isMultiplayer && roomIdRef.current && (phaseRef.current === PHASE.PLAYING || phaseRef.current === PHASE.COUNTDOWN)) {
+      if (!loop._lastPosEmit || now - loop._lastPosEmit >= 33) {
+        loop._lastPosEmit = now;
+        socket.emit("game:position", {
+          roomId: roomIdRef.current,
+          x: Math.round(p.x * 10) / 10,
+          y: Math.round(p.y * 10) / 10,
+          isDashing: !!dashRef.current?.active,
+          isGuarding: isGuardActive(now),
+          isHealing: isCorruptHealActive(now),
+        });
+      }
+    }
+
+    // Process Opponent Soul interpolation & ghost trails
+    const opp = opponentSoulRef.current;
+    if (isMultiplayer && opp.initialized) {
+      const lerpFactor = Math.min(1, dt * 22);
+      opp.currentX += (opp.targetX - opp.currentX) * lerpFactor;
+      opp.currentY += (opp.targetY - opp.currentY) * lerpFactor;
+
+      // Generate ethereal trails for opponent
+      if (opp.isDashing) {
+        opp.trail.push({ x: opp.currentX, y: opp.currentY, lifeMs: 220, maxLifeMs: 220 });
+      } else if (Math.hypot(opp.targetX - opp.currentX, opp.targetY - opp.currentY) > 2) {
+        if (Math.random() < 0.25 && opp.trail.length < 12) {
+          opp.trail.push({ x: opp.currentX, y: opp.currentY, lifeMs: 140, maxLifeMs: 140 });
+        }
+      }
+
+      for (let i = opp.trail.length - 1; i >= 0; i--) {
+        const tr = opp.trail[i];
+        tr.lifeMs -= dt * 1000;
+        if (tr.lifeMs <= 0) opp.trail.splice(i, 1);
+      }
+    }
+
     // Calculate difficulty factor: 0 at start, 1 at 120 seconds (slower progression)
     let difficulty = 0;
     let elapsedMs = 0;
@@ -3811,6 +4132,10 @@ export default function Game({
       }
     }
 
+    // If running in background/minimized mode, physics, damage, and sockets are updated above.
+    // Skip heavy Canvas2D rendering since pixels are not on screen.
+    if (isBackground) return;
+
     ctx.clearRect(0, 0, w, h);
 
     // screen shake
@@ -5345,7 +5670,114 @@ export default function Game({
     ctx.globalAlpha = iframe ? 0.55 : 1;
     ctx.fillStyle = "rgba(255, 80, 120, 0.98)"; // ✅ unchanged
     drawHeart(ctx, 0, 0, 12);
+    if (focusActiveRef.current) {
+      // Precision hitbox center indicator (Undertale cyan soul dot)
+      ctx.fillStyle = "#00ffff";
+      ctx.shadowColor = "#00ffff";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // MULTIPLAYER OPPONENT SOUL RENDERING (ETHEREAL CYAN SPECTRAL SOUL)
+    // ══════════════════════════════════════════════════════════════════════════
+    if (isMultiplayer && opp.initialized && (now - opp.lastUpdate < 8000) && (opp.hp === undefined || opp.hp > 0)) {
+      const ox = clamp(opp.currentX, 18, w - 18);
+      const oy = clamp(opp.currentY, 18, h - 18);
+      const isHitFlash = now < opp.hitFlashUntil;
+
+      // 1. Draw Opponent Dash / Ghost Trails
+      for (const tr of opp.trail) {
+        const trFade = Math.max(0, tr.lifeMs / tr.maxLifeMs);
+        ctx.save();
+        ctx.translate(tr.x, tr.y);
+        ctx.globalAlpha = trFade * 0.45;
+        ctx.fillStyle = "#00ffff";
+        ctx.shadowColor = "#00f0ff";
+        ctx.shadowBlur = 14;
+        drawHeart(ctx, 0, 0, 10 + (1 - trFade) * 4);
+        ctx.restore();
+      }
+
+      // 2. Draw Opponent Guard Barrier if active
+      if (opp.isGuarding) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(0, 255, 255, 0.9)";
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = "#00ffff";
+        ctx.shadowBlur = 12;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        const spin = (now / 250) % (Math.PI * 2);
+        ctx.arc(ox, oy, 18, spin, spin + Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      // 3. Draw Opponent Corrupt Heal Ring if active
+      if (opp.isHealing) {
+        ctx.save();
+        ctx.strokeStyle = `rgba(52, 211, 153, ${0.5 + 0.4 * Math.sin(now / 100)})`;
+        ctx.lineWidth = 2.5;
+        ctx.shadowColor = "#34d399";
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(ox, oy, 22, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // 4. Draw Opponent Soul Heart (Ethereal Cyan Spectral Soul)
+      ctx.save();
+      ctx.translate(ox, oy);
+
+      // Subtle atmospheric breathing pulse
+      const oppPulse = 1 + Math.sin(now / 180) * 0.04;
+      ctx.scale(oppPulse, oppPulse);
+
+      // Glow halo
+      ctx.shadowColor = isHitFlash ? "#ffffff" : "#00f0ff";
+      ctx.shadowBlur = isHitFlash ? 26 : 16;
+      ctx.globalAlpha = isHitFlash ? 1 : 0.88;
+      ctx.fillStyle = isHitFlash
+        ? "#ffffff"
+        : opp.isDashing
+        ? "#7df9ff"
+        : "#00d8f6";
+
+      drawHeart(ctx, 0, 0, 12);
+      ctx.restore();
+
+      // 5. Sleek Undertale Nametag Badge above Opponent Soul
+      const displayName = opponentNameRef.current || opponentName || "OPPONENT";
+      ctx.save();
+      ctx.font = "9px 'Press Start 2P', monospace, sans-serif";
+      const textMetrics = ctx.measureText(displayName);
+      const tagW = Math.max(52, textMetrics.width + 14);
+      const tagH = 16;
+      const tagX = ox - tagW / 2;
+      const tagY = oy - 28;
+
+      // Dark translucent badge background with cyan border
+      ctx.fillStyle = "rgba(6, 12, 22, 0.85)";
+      ctx.fillRect(tagX, tagY, tagW, tagH);
+      ctx.strokeStyle = isHitFlash ? "#ff3366" : "rgba(0, 255, 255, 0.7)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tagX, tagY, tagW, tagH);
+
+      // Opponent Name
+      ctx.fillStyle = isHitFlash ? "#ff3366" : "#00ffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.shadowColor = "#00ffff";
+      ctx.shadowBlur = 4;
+      ctx.fillText(displayName, ox, tagY + tagH / 2 + 1);
+      ctx.restore();
+    }
 
     // Draw Heal Floating Text (HUD level)
     const healMsg = healTextRef.current;
@@ -5424,6 +5856,38 @@ export default function Game({
   // Compute dash status for HUD display
   const dashRem = dashRef.current ? Math.max(0, dashRef.current.cooldownUntil - nowMs) : 0;
   const dashStatus = dashRem <= 0 ? "READY" : (dashRem / 1000).toFixed(1) + "s";
+
+  // Mobile Special Button Situation Resolver
+  const rad = radianceBossRef.current;
+  const god = goddessBossRef.current;
+  const hasActiveBoss = (rad && rad.active) || (god && god.active);
+  const bossCharge = rad?.active ? (rad.orbCharge || 0) : god?.active ? (god.orbCharge || 0) : 0;
+  const bossMaxCharge = rad?.active ? (rad.orbChargeMax || 3) : god?.active ? (god.orbChargeMax || 3) : 3;
+  const isBossChargeFull = hasActiveBoss && bossCharge >= bossMaxCharge;
+
+  let mobileSpecialLabel = "FOCUS";
+  let mobileSpecialSublabel = focusActiveRef.current ? "ACTIVE" : "SLOW";
+  let mobileSpecialReady = true;
+  let mobileSpecialPulse = focusActiveRef.current;
+
+  if (hasActiveBoss) {
+    if (isBossChargeFull) {
+      mobileSpecialLabel = "BOOM";
+      mobileSpecialSublabel = "[R] READY";
+      mobileSpecialReady = true;
+      mobileSpecialPulse = true;
+    } else {
+      mobileSpecialLabel = "CHARGE";
+      mobileSpecialSublabel = `${bossCharge}/${bossMaxCharge}`;
+      mobileSpecialReady = false;
+      mobileSpecialPulse = false;
+    }
+  } else if (corruptHealUntilRef.current > nowMs) {
+    mobileSpecialLabel = "REVIVE";
+    mobileSpecialSublabel = `${Math.max(0, (corruptHealUntilRef.current - nowMs) / 1000).toFixed(1)}s`;
+    mobileSpecialReady = false;
+    mobileSpecialPulse = true;
+  }
 
   // derive text for summary card
   const lastResult = lastResultRef.current;
@@ -5505,6 +5969,7 @@ export default function Game({
             corruptHealRem={Math.max(0, (corruptHealUntilRef.current - nowMs) / 1000)}
             isCompetitive={vsMode === "ranked" || vsMode === "friend"}
             isStandaloneSans={isStandaloneSans}
+            onExit={exitToMenu}
           />
 
           {/* Top Info Bar during MENU / QUEUE / SUMMARY */}
@@ -5537,7 +6002,7 @@ export default function Game({
         </div>
 
         {/* Main Arena Frame — Undertale Battle Box */}
-        <div className="relative flex items-center justify-center w-full flex-1 overflow-hidden undertale-box bg-black">
+        <div className="relative flex items-center justify-center w-full flex-1 overflow-hidden undertale-box bg-black touch-control-layer">
           <canvas
             ref={canvasRef}
             width={980}
@@ -5547,13 +6012,13 @@ export default function Game({
               aspectRatio: "980 / 540",
               maxHeight:
                 phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN
-                  ? "calc(100vh - 80px)"
-                  : "calc(100vh - 120px)",
+                  ? "calc(100vh - 60px)"
+                  : "calc(100vh - 100px)",
             }}
           />
 
-          {/* Bottom Left: Cooldown HUD — Undertale Style */}
-          {(phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
+          {/* Bottom Left: Cooldown HUD — Undertale Style (Desktop only) */}
+          {!showTouchControls && (phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) && (
             <div className="absolute bottom-4 left-4 flex flex-col gap-2 pointer-events-none z-10">
               <div className={`flex items-center justify-between px-3 py-1.5 border-2 font-pixel text-[10px] transition-colors w-36 ${
                 dashRem <= 0
@@ -5577,6 +6042,35 @@ export default function Game({
               </div>
             </div>
           )}
+
+          {/* Mobile Touch Controls Layer (Virtual Joystick & Action Buttons) */}
+          <MobileControls
+            joystickInputRef={joystickInputRef}
+            onDash={() => {
+              pendingMobileTriggerRef.current.dash = true;
+            }}
+            onGuard={() => {
+              pendingMobileTriggerRef.current.guard = true;
+            }}
+            onSpecial={() => {
+              pendingMobileTriggerRef.current.special = true;
+            }}
+            onExit={exitToMenu}
+            dashReady={dashRem <= 0}
+            dashStatus={dashStatus}
+            guardReady={guardStatus === "READY"}
+            guardStatus={guardStatus}
+            guardActive={nowMs < guardUntilRef.current}
+            specialReady={mobileSpecialReady}
+            specialLabel={mobileSpecialLabel}
+            specialSublabel={mobileSpecialSublabel}
+            specialPulse={mobileSpecialPulse}
+            visible={
+              (phase === PHASE.PLAYING || phase === PHASE.COUNTDOWN) &&
+              showTouchControls
+            }
+            showFullscreenButton={showTouchControls}
+          />
 
           {/* MENU Overlay - not shown for time trial */}
           {phase === PHASE.MENU && mode !== "timeTrial" && (
@@ -5782,6 +6276,11 @@ export default function Game({
           {...rankChangeToast}
           onComplete={() => setRankChangeToast(null)}
         />
+      )}
+
+      {/* Landscape Orientation Prompt Modal on Mobile Devices */}
+      {showTouchControls && isPortrait && !dismissPortraitPrompt && (
+        <LandscapePrompt onDismiss={() => setDismissPortraitPrompt(true)} />
       )}
     </div>
   );

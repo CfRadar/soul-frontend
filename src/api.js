@@ -18,12 +18,14 @@ export const updateUsername = authApi.updateUsername;
 export const friendsApi = {
   list: () => request("/friends/list", { auth: true }),
   requests: () => request("/friends/requests", { auth: true }),
+  requestFriend: (query) =>
+    request("/friends/request", { method: "POST", auth: true, body: { query } }),
   requestByUid: (uid) =>
-    request("/friends/request", { method: "POST", auth: true, body: { uid } }),
-  accept: (uid) =>
-    request("/friends/accept", { method: "POST", auth: true, body: { uid } }),
-  decline: (uid) =>
-    request("/friends/decline", { method: "POST", auth: true, body: { uid } }),
+    request("/friends/request", { method: "POST", auth: true, body: { query: uid } }),
+  accept: (target) =>
+    request("/friends/accept", { method: "POST", auth: true, body: { uid: target } }),
+  decline: (target) =>
+    request("/friends/decline", { method: "POST", auth: true, body: { uid: target } }),
 };
 
 /* -----------------------------

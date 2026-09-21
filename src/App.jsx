@@ -7,6 +7,9 @@ import SuspenseLoader from "./components/SuspenseLoader";
 import CursorTrail from "./components/CursorTrail";
 import MenuBackground from "./components/MenuBackground";
 
+import FriendInviteToast from "./components/FriendInviteToast";
+import PlayWithFriendModal from "./components/PlayWithFriendModal";
+
 // Lazy-loaded heavy components (frontend-expert code splitting)
 const Game = lazy(() => import("./features/game"));
 const FriendsPanel = lazy(() => import("./features/friends"));
@@ -42,11 +45,13 @@ export default function App() {
   const [view, setView] = useState(VIEW.MENU);
   const [mode, setMode] = useState("ranked"); // ranked | friend | timeTrial | boss
   const [selectedBossId, setSelectedBossId] = useState(null);
+  const [initialMatchData, setInitialMatchData] = useState(null);
 
   // Modals
   const [notifOpen, setNotifOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [usernameModalOpen, setUsernameModalOpen] = useState(false);
+  const [friendModalOpen, setFriendModalOpen] = useState(false);
 
   // Wake backend server on load (e.g. Render spin-up)
   useEffect(() => {
@@ -56,8 +61,11 @@ export default function App() {
   // Global socket listener: auto-navigate to GAME on match found
   useEffect(() => {
     const onMatchFound = (payload) => {
+      console.log("[App] matchFound event received:", payload);
       const matchMode = payload?.mode || "ranked";
+      setInitialMatchData(payload);
       setMode(matchMode === "friend" ? "friend" : "ranked");
+      setFriendModalOpen(false);
       setView(VIEW.GAME);
     };
 
@@ -68,27 +76,30 @@ export default function App() {
   // Navigation handlers
   const handleExitGame = useCallback(() => {
     setSelectedBossId(null);
+    setInitialMatchData(null);
     setView(VIEW.MENU);
   }, []);
 
   const handleStartRanked = useCallback(() => {
     setMode("ranked");
+    setInitialMatchData(null);
     setView(VIEW.GAME);
   }, []);
 
   const handleStartFriendMatch = useCallback(() => {
-    setMode("friend");
-    setView(VIEW.GAME);
+    setFriendModalOpen(true);
   }, []);
 
   const handleStartTimeTrial = useCallback(() => {
     setMode("timeTrial");
+    setInitialMatchData(null);
     setView(VIEW.GAME);
   }, []);
 
   const handleStartBoss = useCallback((bossId) => {
     setMode("boss");
     setSelectedBossId(bossId);
+    setInitialMatchData(null);
     setView(VIEW.GAME);
   }, []);
 
@@ -98,9 +109,12 @@ export default function App() {
   }, [logout]);
 
   return (
-    <div className="h-screen w-screen bg-black text-white relative overflow-hidden flex flex-col select-none font-dialogue">
+    <div className="h-screen h-[100dvh] w-screen bg-black text-white relative overflow-hidden flex flex-col select-none font-dialogue">
       <MenuBackground />
       <CursorTrail />
+
+      {/* Global Side Toast for Friend Duel Invites */}
+      <FriendInviteToast onAccepted={() => setFriendModalOpen(false)} />
 
       {/* FULL-SCREEN GAME VIEWPORT: Zero scrollbars, maximum screen coverage */}
       {view === VIEW.GAME && me ? (
@@ -110,6 +124,7 @@ export default function App() {
               mode={mode}
               bossId={selectedBossId}
               token={token}
+              initialMatchData={initialMatchData}
               onExit={handleExitGame}
               onBack={handleExitGame}
               me={me}
@@ -123,10 +138,10 @@ export default function App() {
         </div>
       ) : (
         /* MAIN APPLICATION SHELL (Auth / Menu / Friends / Bosses) */
-        <div className="relative z-10 w-full h-full flex flex-col overflow-hidden p-2.5 md:p-4">
+        <div className="relative z-10 w-full h-full flex flex-col overflow-hidden p-2 sm:p-2.5 md:p-4">
           {/* Top Navigation Bar */}
           {me && (
-            <div className="mb-2.5 md:mb-3 flex-shrink-0">
+            <div className="mb-2 sm:mb-2.5 md:mb-3 flex-shrink-0">
               <TopNavBar
                 me={me}
                 socketStatus={socketStatus}
@@ -138,7 +153,7 @@ export default function App() {
           )}
 
           {/* Content Area */}
-          <div className="flex-1 min-h-0 w-full overflow-hidden">
+          <div className="flex-1 min-h-0 w-full overflow-y-auto overflow-x-hidden">
             {initialChecking ? (
               <SuspenseLoader minHeight="300px" />
             ) : !me ? (
@@ -210,6 +225,12 @@ export default function App() {
           open={usernameModalOpen}
           onClose={() => setUsernameModalOpen(false)}
           onSave={updateUsername}
+        />
+
+        <PlayWithFriendModal
+          open={friendModalOpen}
+          onClose={() => setFriendModalOpen(false)}
+          me={me}
         />
       </SuspenseLoader>
     </div>

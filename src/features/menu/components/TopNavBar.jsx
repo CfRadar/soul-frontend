@@ -8,12 +8,12 @@ export function TopNavBar({
   onLogout,
 }) {
   return (
-    <header className="undertale-box px-4 md:px-5 py-2.5 flex items-center justify-between w-full flex-shrink-0 z-20 font-pixel">
+    <header className="undertale-box px-2.5 sm:px-4 md:px-5 py-2 sm:py-2.5 flex items-center justify-between w-full flex-shrink-0 z-20 font-pixel">
       {/* Left: Brand title & socket status */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-[#ff0000] text-sm animate-heartbeat">❤️</span>
-          <h1 className="text-sm md:text-base font-bold tracking-wider text-white">
+      <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <span className="text-[#ff0000] text-xs sm:text-sm animate-heartbeat">❤️</span>
+          <h1 className="text-xs sm:text-sm md:text-base font-bold tracking-wider text-white whitespace-nowrap">
             SOUL DUEL
           </h1>
         </div>
@@ -52,11 +52,11 @@ export function TopNavBar({
 
       {/* Right: Actions (only when logged in) */}
       {me && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Guide button */}
           <button
             onClick={onOpenGuide}
-            className="text-[10px] border-2 border-white px-2.5 py-1.5 hover:bg-white hover:text-black transition cursor-pointer"
+            className="text-[9px] sm:text-[10px] border-2 border-white px-2 sm:px-2.5 py-1 sm:py-1.5 hover:bg-white hover:text-black transition cursor-pointer"
           >
             [ GUIDE ]
           </button>
@@ -64,7 +64,7 @@ export function TopNavBar({
           {/* Bell Notifications button */}
           <button
             onClick={onOpenNotifications}
-            className="border-2 border-white p-1.5 hover:bg-white hover:text-black transition cursor-pointer flex items-center justify-center"
+            className="border-2 border-white p-1 sm:p-1.5 hover:bg-white hover:text-black transition cursor-pointer flex items-center justify-center"
             aria-label="Notifications"
             title="Notifications"
           >
@@ -86,8 +86,10 @@ export function TopNavBar({
 
           {/* Logout button */}
           <button
+            type="button"
             onClick={onLogout}
-            className="text-[10px] border-2 border-[#ffff00] text-[#ffff00] px-2.5 py-1.5 hover:bg-[#ffff00] hover:text-black transition cursor-pointer"
+            className="text-[9px] sm:text-[10px] border-2 border-[#ffff00] text-[#ffff00] px-2.5 sm:px-3 py-1.5 hover:bg-[#ffff00] hover:text-black transition cursor-pointer active:scale-95 flex-shrink-0 touch-manipulation select-none"
+            title="Log out and return to Login"
           >
             [ EXIT ]
           </button>

@@ -57,32 +57,37 @@ export default function FriendsPanel({ me, onBack }) {
       if (data.status === "declined") setMsg("Invite declined.");
     };
 
+    const onStatusChange = ({ uid, online }) => {
+      setFriends((prev) =>
+        prev.map((f) => (f.uid === uid ? { ...f, online } : f))
+      );
+    };
+
     socket.on("friend:invite:received", onInviteReceived);
     socket.on("friend:invite:status", onInviteStatus);
+    socket.on("player:statusChange", onStatusChange);
 
     return () => {
       socket.off("friend:invite:received", onInviteReceived);
       socket.off("friend:invite:status", onInviteStatus);
+      socket.off("player:statusChange", onStatusChange);
     };
   }, []);
 
   async function sendFriendRequest() {
     setMsg("");
     try {
-      const uid = uidInput.trim().toUpperCase();
-      if (!uid) return setMsg("Enter UID.");
+      const query = uidInput.trim();
+      if (!query) return setMsg("Enter Username or UID.");
 
-      // requestByUid only takes the uid; the helper reads the token from
-      // localStorage internally via the `auth: true` flag. passing our
-      // `token` variable here was harmless but misleading.
-      const r = await friendsApi.requestByUid(uid);
-      if (!r?.ok) return setMsg(r?.error || "Request failed");
+      const r = await friendsApi.requestFriend(query);
+      if (!r?.ok) return setMsg(r?.error === "no_user" ? "Soul not found. Check username or UID." : (r?.error || "Request failed"));
 
       setUidInput("");
       setMsg(
         r.status === "accepted"
-          ? "Auto-accepted (they already requested you)."
-          : "Friend request sent!"
+          ? "Auto-accepted (they already requested you)!"
+          : `Friend request sent to ${r.target?.username || query}!`
       );
       refreshAll();
     } catch {
@@ -157,13 +162,13 @@ export default function FriendsPanel({ me, onBack }) {
         {/* Add Friend */}
         <div className="undertale-box-green p-3 md:p-4">
           <div className="font-pixel text-xs text-[#00ff00] mb-3">
-            * ADD SOUL BY UID
+            * ADD SOUL BY USERNAME OR UID
           </div>
           <div className="flex gap-2">
             <input
               value={uidInput}
               onChange={(e) => setUidInput(e.target.value)}
-              placeholder="SD-XXXXXX"
+              placeholder="Username or SD-XXXXXX"
               className="flex-1 bg-black border-2 border-white px-3 py-2 font-pixel text-xs text-[#00ff00] outline-none focus:border-[#00ff00] transition"
               onKeyDown={(e) => e.key === "Enter" && sendFriendRequest()}
             />
@@ -268,9 +273,28 @@ export default function FriendsPanel({ me, onBack }) {
                   className="border-2 border-white/40 hover:border-[#00ff00] p-3 flex items-center justify-between gap-3 transition"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <RankBadge rank={f.rank} rating={f.rating} size="sm" />
+                    <div className="relative">
+                      <RankBadge rank={f.rank} rating={f.rating} size="sm" />
+                      <span
+                        className={`absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-black ${
+                          f.online ? "bg-emerald-400 shadow-[0_0_8px_#34d399]" : "bg-neutral-600"
+                        }`}
+                        title={f.online ? "Online" : "Offline"}
+                      />
+                    </div>
                     <div className="min-w-0">
-                      <div className="font-pixel text-[10px] text-white truncate">{f.username}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-pixel text-[10px] text-white truncate">{f.username}</span>
+                        <span
+                          className={`font-pixel text-[8px] px-1 py-0.2 border ${
+                            f.online
+                              ? "border-emerald-500 text-emerald-400"
+                              : "border-neutral-700 text-neutral-500"
+                          }`}
+                        >
+                          {f.online ? "ONLINE" : "OFFLINE"}
+                        </span>
+                      </div>
                       <div className="font-dialogue text-sm text-neutral-400">{f.uid}</div>
                     </div>
                   </div>

@@ -347,13 +347,11 @@ export default function Game({
       window.matchMedia?.("(pointer: coarse)")?.matches ||
       window.innerWidth <= 950)
   );
-  // Orientation tracking: landscape vs portrait
+  // Mobile orientation tracking: landscape vs portrait
   const [isPortrait, setIsPortrait] = useState(() =>
     typeof window !== "undefined" ? window.innerHeight > window.innerWidth : false
   );
   const [dismissPortraitPrompt, setDismissPortraitPrompt] = useState(false);
-  // Mobile HUD refresh state – tick every 100ms so button readiness and cooldowns update visually
-  const [mobileTick, setMobileTick] = useState(0);
 
   useEffect(() => {
     const handleOrientation = () => {
@@ -374,13 +372,6 @@ export default function Game({
       window.removeEventListener("resize", handleOrientation);
       window.removeEventListener("orientationchange", handleOrientation);
     };
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMobileTick((t) => (t + 1) % 10000);
-    }, 100);
-    return () => clearInterval(interval);
   }, []);
 
   const lastHitAtRef = useRef(-9999);
@@ -1817,7 +1808,8 @@ export default function Game({
 
     rngRef.current = mulberry32(Number(seedValue) || 123456);
 
-    const base = serverStartAt || Date.now();
+    const now = Date.now();
+    const base = (mode === "timeTrial" || mode === "boss") ? now : (serverStartAt || now);
     surviveStartRef.current = base;
     setSurviveStart(base);
 
@@ -1839,10 +1831,11 @@ export default function Game({
       spawnRef.current.nextSpawnAtMs = 500;
     }
 
-    loop._lastNow = undefined;
+    loop._lastNow = now;
+    loop._lastTickMs = now;
 
     cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(loop);
+    rafRef.current = requestAnimationFrame(() => loop(false));
   }
 
   function endMatch(wid) {
@@ -1997,28 +1990,34 @@ export default function Game({
     };
   }, [phase]);
 
-  // Handle visibility change: instantly resume rAF when user returns to tab
+  // Handle visibility change and window focus: instantly resume rAF when user returns to tab
   useEffect(() => {
     const handleVisChange = () => {
       if (!document.hidden && phaseRef.current === PHASE.PLAYING) {
+        loop._lastNow = Date.now();
+        loop._lastTickMs = Date.now();
         cancelAnimationFrame(rafRef.current);
         rafRef.current = requestAnimationFrame(() => loop(false));
       }
     };
     document.addEventListener("visibilitychange", handleVisChange);
+    window.addEventListener("focus", handleVisChange);
     return () => {
       document.removeEventListener("visibilitychange", handleVisChange);
+      window.removeEventListener("focus", handleVisChange);
     };
   }, []);
 
-  // Watchdog: if the loop stalls while playing, restart it
+  // Watchdog: if the loop stalls while playing, restart it immediately (every 250ms check, >500ms stall threshold)
   useEffect(() => {
     const watchdog = setInterval(() => {
       if (phaseRef.current !== PHASE.PLAYING) return;
-      const lastTick = loop._lastTickMs ?? 0;
-      if (Date.now() - lastTick > 2000) {
-        console.warn("[GameLoop] Watchdog detected stall – restarting loop");
+      const lastTick = loop._lastTickMs ?? Date.now();
+      const elapsedSinceTick = Date.now() - lastTick;
+      if (elapsedSinceTick > 500) {
+        console.warn(`[GameLoop] Watchdog detected stall (${elapsedSinceTick}ms) – restarting loop`);
         loop._lastNow = Date.now();
+        loop._lastTickMs = Date.now();
         if (!document.hidden) {
           cancelAnimationFrame(rafRef.current);
           rafRef.current = requestAnimationFrame(() => loop(false));
@@ -2026,7 +2025,7 @@ export default function Game({
           loop(true);
         }
       }
-    }, 1000);
+    }, 250);
     return () => clearInterval(watchdog);
   }, []);
 
@@ -2452,11 +2451,14 @@ export default function Game({
     }
   }
 
-  function loop(isBackground = false) {
+  function loop(isBgArg = false) {
+    const isBackground = isBgArg === true;
+
     // ── SCHEDULE NEXT FRAME FIRST ──────────────────────────────────────────
-    // When visible and playing, queue next rAF.
+    // When visible and playing, queue next rAF cleanly without timestamp pollution.
     // In background/minimized mode, the Web Worker drives the loop at 60Hz.
     if (!isBackground && phaseRef.current === PHASE.PLAYING) {
+      cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => loop(false));
     }
     loop._lastTickMs = Date.now(); // for watchdog
@@ -2636,7 +2638,7 @@ export default function Game({
     let elapsedMs = 0;
     const base = surviveStartRef.current;
     if (base > 0) {
-      elapsedMs = now - base;
+      elapsedMs = Math.max(0, now - base);
 
       // Fast-forward script time for standalone Bosses mode to trigger phases instantly
       if (mode === "boss" && bossId) {
@@ -6224,7 +6226,7 @@ export default function Game({
               <div className="text-center">
                 <div className="font-pixel text-sm text-neutral-400 tracking-widest mb-4">* MATCH STARTING</div>
                 <div className="font-pixel text-7xl md:text-8xl text-[#ffff00] tabular-nums drop-shadow-[0_0_20px_rgba(255,255,0,0.5)] animate-pulse">
-                  {Math.max(0, Math.ceil(countdownMs / 1000))}
+                  {Math.max(1, Math.ceil(countdownMs / 1000))}
                 </div>
               </div>
             </Overlay>

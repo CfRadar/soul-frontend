@@ -16,9 +16,9 @@ const BOSS_DATA = [
   },
   {
     id: "boss_goddess",
-    name: "THE ASCENDED BLADE",
-    description: "An ancient warrior awakening from the void with her glowing greatsword.",
-    icon: "⚔️",
+    name: "CIPHER: THE NULL OVERSEER",
+    description: "An ancient dark cosmic void entity. Manipulates spatial boundaries, event horizon beams, and quantum singularities.",
+    icon: "👁️",
   },
 ];
 

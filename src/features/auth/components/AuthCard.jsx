@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import LoginForm from "./LoginForm";
 import SignupForm from "./SignupForm";
 
-export function AuthCard({ onLogin, onSignup, loading, error, clearError }) {
+export function AuthCard({ onLogin, onSignup, loading, error, clearError, onlineCount = 0 }) {
   const [activeTab, setActiveTab] = useState("login"); // "login" | "signup"
 
   const handleTabChange = (tab) => {
@@ -63,6 +63,14 @@ export function AuthCard({ onLogin, onSignup, loading, error, clearError }) {
       ) : (
         <SignupForm onSignup={onSignup} loading={loading} error={error} />
       )}
+
+      {/* Online Souls Indicator */}
+      <div className="mt-5 pt-3.5 border-t border-neutral-800 flex items-center justify-center gap-2 font-pixel text-[10px] text-neutral-400 select-none">
+        <span className="w-2 h-2 rounded-full bg-[#00ff00] shadow-[0_0_6px_#00ff00] animate-pulse" />
+        <span className="tracking-wide">
+          {onlineCount} {onlineCount === 1 ? "SOUL ACTIVE" : "SOULS ACTIVE"} IN THE UNDERGROUND
+        </span>
+      </div>
     </div>
   );
 }

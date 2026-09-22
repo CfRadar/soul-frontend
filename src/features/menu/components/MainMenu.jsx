@@ -11,6 +11,7 @@ function safeUsername(username) {
 
 export function MainMenu({
   me,
+  onlineCount = 0,
   onOpenUsernameModal,
   onStartRanked,
   onStartFriendMatch,
@@ -50,6 +51,10 @@ export function MainMenu({
                 <span>* HP 100/100</span>
                 <span>* EXP {me.rating || 0}</span>
                 <span>* RECORD {me.wins || 0}W - {me.losses || 0}L ({winrate}%)</span>
+                <span className="text-[#00ff00] inline-flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00ff00] animate-pulse" />
+                  * SOULS ONLINE: {onlineCount}
+                </span>
               </div>
             </div>
 

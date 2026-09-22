@@ -3,6 +3,7 @@ import { API_URL } from "./api/client";
 import { useAuth, AuthCard } from "./features/auth";
 import { TopNavBar, MainMenu, UsernameModal } from "./features/menu";
 import { useSocketDiagnostics } from "./hooks/useSocketDiagnostics";
+import { useOnlineCount } from "./hooks/useOnlineCount";
 import SuspenseLoader from "./components/SuspenseLoader";
 import CursorTrail from "./components/CursorTrail";
 import MenuBackground from "./components/MenuBackground";
@@ -41,6 +42,7 @@ export default function App() {
   } = useAuth();
 
   const { socketStatus, socket } = useSocketDiagnostics();
+  const { onlineCount } = useOnlineCount(me);
 
   const [view, setView] = useState(VIEW.MENU);
   const [mode, setMode] = useState("ranked"); // ranked | friend | timeTrial | boss
@@ -145,6 +147,7 @@ export default function App() {
               <TopNavBar
                 me={me}
                 socketStatus={socketStatus}
+                onlineCount={onlineCount}
                 onOpenGuide={() => setGuideOpen(true)}
                 onOpenNotifications={() => setNotifOpen(true)}
                 onLogout={handleLogout}
@@ -165,6 +168,7 @@ export default function App() {
                   loading={authLoading}
                   error={authError}
                   clearError={() => setAuthError("")}
+                  onlineCount={onlineCount}
                 />
               </div>
             ) : (
@@ -173,6 +177,7 @@ export default function App() {
                 {view === VIEW.MENU && (
                   <MainMenu
                     me={me}
+                    onlineCount={onlineCount}
                     onOpenUsernameModal={() => setUsernameModalOpen(true)}
                     onStartRanked={handleStartRanked}
                     onStartFriendMatch={handleStartFriendMatch}

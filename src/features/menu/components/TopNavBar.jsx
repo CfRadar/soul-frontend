@@ -3,14 +3,15 @@ import React from "react";
 export function TopNavBar({
   me,
   socketStatus,
+  onlineCount = 0,
   onOpenGuide,
   onOpenNotifications,
   onLogout,
 }) {
   return (
     <header className="undertale-box px-2.5 sm:px-4 md:px-5 py-2 sm:py-2.5 flex items-center justify-between w-full flex-shrink-0 z-20 font-pixel">
-      {/* Left: Brand title & socket status */}
-      <div className="flex items-center gap-2 sm:gap-4">
+      {/* Left: Brand title & socket status & online player count */}
+      <div className="flex items-center gap-2 sm:gap-3">
         <div className="flex items-center gap-1.5 sm:gap-2">
           <span className="text-[#ff0000] text-xs sm:text-sm animate-heartbeat">❤️</span>
           <h1 className="text-xs sm:text-sm md:text-base font-bold tracking-wider text-white whitespace-nowrap">
@@ -18,22 +19,24 @@ export function TopNavBar({
           </h1>
         </div>
 
-        {me && socketStatus && (
-          <div className="hidden sm:flex items-center gap-1.5 text-[9px] border-2 border-white/60 px-2 py-0.5">
-            <span
-              className={`w-2 h-2 ${
-                socketStatus === "connected"
-                  ? "bg-[#00ff00] shadow-[0_0_4px_#00ff00]"
-                  : socketStatus === "reconnecting"
-                  ? "bg-[#ffff00] animate-pulse"
-                  : "bg-[#ff0000]"
-              }`}
-            />
-            <span className="tracking-widest uppercase text-white/80">
-              {socketStatus === "connected" ? "ONLINE" : socketStatus}
-            </span>
-          </div>
-        )}
+        {/* Real-time Online Souls Count Badge */}
+        <div
+          className="flex items-center gap-1.5 text-[9px] sm:text-[10px] border-2 border-white/60 px-2 py-0.5 bg-black/50 select-none"
+          title={`${onlineCount} active player${onlineCount === 1 ? "" : "s"} online`}
+        >
+          <span
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              socketStatus === "connected"
+                ? "bg-[#00ff00] shadow-[0_0_6px_#00ff00] animate-pulse"
+                : socketStatus === "reconnecting"
+                ? "bg-[#ffff00] animate-pulse"
+                : "bg-[#ff0000]"
+            }`}
+          />
+          <span className="tracking-wider uppercase text-white/90 whitespace-nowrap">
+            {onlineCount} <span className="hidden sm:inline">SOUL{onlineCount === 1 ? "" : "S"}</span> ONLINE
+          </span>
+        </div>
       </div>
 
       {/* Middle: Player HP meter in Undertale style (desktop only) */}

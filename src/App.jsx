@@ -119,8 +119,8 @@ export default function App() {
       {/* Global Side Toast for Friend Duel Invites */}
       <FriendInviteToast onAccepted={() => setFriendModalOpen(false)} />
 
-      {/* Global Quick Fullscreen Exit Button (appears whenever in fullscreen outside main nav) */}
-      {(view === VIEW.GAME || !me) && <FloatingFullscreenButton />}
+      {/* Global Quick Fullscreen Exit Button (only for logged-out / auth screen if in fullscreen) */}
+      {!me && <FloatingFullscreenButton />}
 
       {/* FULL-SCREEN GAME VIEWPORT: Zero scrollbars, maximum screen coverage */}
       {view === VIEW.GAME && me ? (
@@ -144,10 +144,18 @@ export default function App() {
         </div>
       ) : (
         /* MAIN APPLICATION SHELL (Auth / Menu / Friends / Bosses) */
-        <div className="relative z-10 w-full h-full flex flex-col overflow-hidden p-1.5 sm:p-2.5 md:p-4 box-border">
+        <div
+          style={{
+            paddingLeft: "max(6px, env(safe-area-inset-left, 6px))",
+            paddingRight: "max(6px, env(safe-area-inset-right, 6px))",
+            paddingTop: "max(4px, env(safe-area-inset-top, 4px))",
+            paddingBottom: "max(4px, env(safe-area-inset-bottom, 4px))",
+          }}
+          className="relative z-10 w-full h-full flex flex-col overflow-hidden box-border"
+        >
           {/* Top Navigation Bar */}
           {me && (
-            <div className="mb-1.5 sm:mb-2.5 md:mb-3 flex-shrink-0">
+            <div className="mb-1 sm:mb-1.5 md:mb-2 flex-shrink-0">
               <TopNavBar
                 me={me}
                 socketStatus={socketStatus}

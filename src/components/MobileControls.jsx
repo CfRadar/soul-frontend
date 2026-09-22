@@ -593,23 +593,7 @@ export default function MobileControls({
   visible = true,
   showFullscreenButton = true,
 }) {
-  if (!visible) {
-    if (!onExit && !showFullscreenButton) return null;
-    return (
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          zIndex: 40,
-          boxSizing: "border-box",
-        }}
-      >
-        {onExit && <ExitMatchButton onExit={onExit} />}
-        {showFullscreenButton && <FullscreenButton />}
-      </div>
-    );
-  }
+  if (!visible) return null;
 
   return (
     <div
@@ -629,10 +613,6 @@ export default function MobileControls({
         boxSizing: "border-box",
       }}
     >
-      {/* ── Top Bar Controls: Exit Button (top-left) & Fullscreen Button (top-right) ── */}
-      {onExit && <ExitMatchButton onExit={onExit} />}
-      {showFullscreenButton && <FullscreenButton />}
-
       {/* ── LEFT: Virtual Joystick Zone ── */}
       <div
         style={{

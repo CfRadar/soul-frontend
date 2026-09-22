@@ -7,6 +7,7 @@ import RankChangeToast from "./ui/RankChangeToast";
 import MobileControls, { LandscapePrompt } from "./components/MobileControls";
 import radianceMusicAsset from "../assets/music/RadiantBossFight.mp3";
 import goddessMusicAsset from "../assets/music/GoddessBossFight.mp3";
+import { useFullscreen } from "./hooks/useFullscreen";
 
 function clamp(n, a, b) {
   return Math.max(a, Math.min(b, n));
@@ -186,7 +187,7 @@ function getNextTierGoal(ms) {
 }
 
 // ========== HeaderBar Component (Internal) ==========
-// Clean top HUD bar above canvas - shown during COUNTDOWN + PLAYING
+// Clean, collision-free top HUD bar above canvas - shown during COUNTDOWN + PLAYING
 function HeaderBar({
   myName, oppName,
   hp, enemyHp,
@@ -195,6 +196,8 @@ function HeaderBar({
   phase, guardStatus, corruptHealRem,
   isCompetitive, isStandaloneSans,
   onExit,
+  onToggleFs,
+  isFs,
 }) {
   const showBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
 
@@ -204,75 +207,101 @@ function HeaderBar({
   const showEnemyHp = isCompetitive || isStandaloneSans;
 
   return (
-    <div className="flex items-center justify-between px-2 sm:px-4 py-1 sm:py-2 border-b-2 sm:border-b-4 border-white bg-black min-h-[42px] sm:min-h-[56px] font-pixel">
-      {/* Left: Names */}
-      <div className="w-[30%] min-w-0 flex items-center gap-1.5 sm:gap-2">
-        <span className="text-[#ff0000] text-[10px] sm:text-xs animate-heartbeat">❤️</span>
-        <span className="text-[10px] sm:text-xs text-white truncate uppercase tracking-wide">
-          {myName}
-        </span>
-        <span className="mx-0.5 sm:mx-1 text-neutral-500 text-[9px] sm:text-xs">VS</span>
-        <span className="text-[10px] sm:text-xs text-neutral-400 truncate uppercase tracking-wide">
-          {oppName}
-        </span>
+    <div
+      style={{
+        paddingLeft: "max(6px, env(safe-area-inset-left, 6px))",
+        paddingRight: "max(6px, env(safe-area-inset-right, 6px))",
+        paddingTop: "max(2px, env(safe-area-inset-top, 2px))",
+      }}
+      className="flex items-center justify-between py-1 border-b-2 border-white bg-black h-8 sm:h-9 w-full flex-shrink-0 font-pixel text-white select-none overflow-hidden box-border gap-1 sm:gap-2 z-20"
+    >
+      {/* Left: Exit button + Player Names */}
+      <div className="flex items-center gap-1 sm:gap-1.5 min-w-0 flex-shrink">
+        {onExit && (
+          <button
+            type="button"
+            onClick={onExit}
+            className="text-[7.5px] sm:text-[9px] border border-[#ffff00] text-[#ffff00] hover:bg-[#ffff00] hover:text-black px-1 sm:px-1.5 py-0.5 sm:py-1 transition cursor-pointer flex-shrink-0 font-pixel active:scale-95 leading-none flex items-center justify-center"
+            title="Leave Match and return to Menu"
+          >
+            <span className="sm:hidden">✕</span>
+            <span className="hidden sm:inline">[ EXIT ]</span>
+          </button>
+        )}
+
+        <div className="flex items-center gap-1 min-w-0 flex-shrink">
+          <span className="text-[#ff0000] text-[8.5px] sm:text-xs animate-heartbeat flex-shrink-0">❤️</span>
+          <span className="text-[7.5px] sm:text-[9px] text-white truncate max-w-[40px] sm:max-w-[85px] md:max-w-[130px] uppercase tracking-wide">
+            {myName}
+          </span>
+          {oppName && (
+            <>
+              <span className="text-[7px] sm:text-[8px] text-neutral-500 flex-shrink-0">VS</span>
+              <span className="text-[7.5px] sm:text-[9px] text-neutral-400 truncate max-w-[40px] sm:max-w-[85px] md:max-w-[130px] uppercase tracking-wide">
+                {oppName}
+              </span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Center: Timer */}
-      <div className="w-[32%] flex justify-center">
-        <span className={`text-lg sm:text-2xl text-white tabular-nums tracking-widest ${phase === PHASE.PLAYING ? 'text-[#ffff00]' : 'text-white'}`}>
+      <div className="flex items-center justify-center flex-shrink-0 px-1">
+        <span className={`text-[10px] sm:text-xs md:text-sm font-bold tabular-nums tracking-widest leading-none ${phase === PHASE.PLAYING ? 'text-[#ffff00]' : 'text-white'}`}>
           {timerText}
         </span>
       </div>
 
-      {/* Right: HP Bars */}
-      <div className="w-[38%] flex justify-end items-center gap-4">
+      {/* Right: HP Bars + Fullscreen Button */}
+      <div className="flex items-center justify-end gap-1 sm:gap-1.5 flex-shrink-0">
         {/* Opponent HP (Competitive) */}
         {showEnemyHp && oppName && (
-          <div className="flex flex-col items-end gap-1">
-            <div className="text-[9px] text-neutral-400 tracking-widest">{isStandaloneSans ? '* BOSS HP' : '* OPP HP'}</div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-20 h-3 bg-[#880000] border border-white/60 overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-300 ${enemyHitFlash ? 'bg-red-400' : enemyHealFlash ? 'bg-[#00ff00]' : 'bg-[#ff9900]'}`}
-                  style={{ width: `${Math.max(0, Math.min(100, enemyHp))}%` }}
-                />
-              </div>
-              <span className={`text-xs tabular-nums transition-all duration-150 ${enemyHitFlash ? 'text-red-400' : enemyHealFlash ? 'text-[#00ff00]' : 'text-neutral-300'}`}>
-                {enemyHpPulse ? '???' : enemyHp}
-              </span>
+          <div className="flex items-center gap-0.5 sm:gap-1">
+            <span className="text-[7px] sm:text-[8px] text-neutral-400 hidden sm:inline">{isStandaloneSans ? 'BOSS' : 'OPP'}</span>
+            <div className="w-8 sm:w-14 md:w-20 h-2 sm:h-2.5 bg-[#880000] border border-white/60 overflow-hidden flex-shrink-0">
+              <div
+                className={`h-full transition-all duration-300 ${enemyHitFlash ? 'bg-red-400' : enemyHealFlash ? 'bg-[#00ff00]' : 'bg-[#ff9900]'}`}
+                style={{ width: `${Math.max(0, Math.min(100, enemyHp))}%` }}
+              />
             </div>
+            <span className={`text-[7.5px] sm:text-[9px] tabular-nums transition-all duration-150 ${enemyHitFlash ? 'text-red-400' : enemyHealFlash ? 'text-[#00ff00]' : 'text-neutral-300'}`}>
+              {enemyHpPulse ? '???' : enemyHp}
+            </span>
           </div>
         )}
 
         {/* My HP Bar */}
-        <div className="flex flex-col items-end gap-1 border-l-2 border-white/20 pl-4">
+        <div className="flex items-center gap-0.5 sm:gap-1 border-l border-white/30 pl-1 sm:pl-1.5">
           {isCorruptActive && (
-            <div className="text-[9px] text-[#ff00ff] animate-pulse tracking-wider">
-              REV: {corruptHealRem.toFixed(1)}s
-            </div>
-          )}
-          <div className="text-[9px] text-neutral-400 tracking-widest">* MY HP</div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-24 h-3 bg-[#880000] border border-white/60 overflow-hidden">
-              <div
-                className={`h-full transition-all duration-300 ${hpHitPulse ? 'bg-red-400' : 'bg-[#ffff00]'}`}
-                style={{ width: `${Math.max(0, Math.min(100, hp))}%` }}
-              />
-            </div>
-            <span className={`text-xs tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110' : 'text-white'}`}>
-              {hp}
+            <span className="text-[7px] text-[#ff00ff] animate-pulse hidden sm:inline">
+              R:{corruptHealRem.toFixed(0)}s
             </span>
+          )}
+          <span className="text-[7px] sm:text-[8px] text-neutral-400 hidden sm:inline">HP</span>
+          <div className="w-9 sm:w-16 md:w-24 h-2 sm:h-2.5 bg-[#880000] border border-white/60 overflow-hidden flex-shrink-0">
+            <div
+              className={`h-full transition-all duration-300 ${hpHitPulse ? 'bg-red-400' : 'bg-[#ffff00]'}`}
+              style={{ width: `${Math.max(0, Math.min(100, hp))}%` }}
+            />
           </div>
+          <span className={`text-[7.5px] sm:text-[9px] tabular-nums transition-all duration-150 ${hpHitPulse ? 'text-red-400 scale-110 font-bold' : 'text-white'}`}>
+            {hp}
+          </span>
         </div>
 
-        {/* Exit match button */}
-        {onExit && (
+        {/* Fullscreen Toggle button */}
+        {onToggleFs && (
           <button
-            onClick={onExit}
-            className="text-[9px] sm:text-[10px] border border-[#ffff00] text-[#ffff00] hover:bg-[#ffff00] hover:text-black px-2 py-1 transition cursor-pointer flex-shrink-0 font-pixel active:scale-95"
-            title="Leave Match and return to Menu"
+            type="button"
+            onClick={onToggleFs}
+            className={`h-5 sm:h-6 w-5 sm:w-6 text-[8px] sm:text-[9px] border transition cursor-pointer flex items-center justify-center active:scale-95 leading-none flex-shrink-0 ${
+              isFs
+                ? "border-[#00ffff] text-[#00ffff] bg-[#00ffff]/10"
+                : "border-white/80 text-white hover:bg-white hover:text-black"
+            }`}
+            title={isFs ? "Exit Fullscreen" : "Fullscreen"}
           >
-            [ EXIT ]
+            <span>{isFs ? "⊠" : "⛶"}</span>
           </button>
         )}
       </div>
@@ -294,6 +323,7 @@ export default function Game({
   const canvasRef = useRef(null);
   const rafRef = useRef(0);
   const keysRef = useRef(new Set());
+  const { isFullscreen: isFs, toggle: toggleFs } = useFullscreen();
 
   // ── Mobile touch controls ──────────────────────────────────────────────────
   // joystickInputRef: { ax: -1..1, ay: -1..1 } written by the virtual joystick
@@ -5951,8 +5981,16 @@ export default function Game({
   const showHeaderBar = phase === PHASE.COUNTDOWN || phase === PHASE.PLAYING;
 
   return (
-    <div className="w-screen h-screen max-w-full max-h-full bg-black text-white flex flex-col items-center justify-center overflow-hidden select-none p-1.5 sm:p-2.5 font-dialogue">
-      <div className="relative flex flex-col items-center justify-center w-full max-w-[1100px] h-full max-h-screen overflow-hidden gap-2">
+    <div
+      style={{
+        paddingLeft: "max(4px, env(safe-area-inset-left, 4px))",
+        paddingRight: "max(4px, env(safe-area-inset-right, 4px))",
+        paddingTop: "max(2px, env(safe-area-inset-top, 2px))",
+        paddingBottom: "max(4px, env(safe-area-inset-bottom, 4px))",
+      }}
+      className="w-screen h-screen max-w-full max-h-full bg-black text-white flex flex-col items-center justify-start overflow-hidden select-none font-dialogue box-border"
+    >
+      <div className="relative flex flex-col items-center justify-start w-full max-w-[1100px] h-full max-h-screen overflow-hidden gap-1 sm:gap-1.5">
         {/* Top Header during COUNTDOWN & PLAYING */}
         <div className="w-full flex-shrink-0">
           <HeaderBar
@@ -5970,33 +6008,59 @@ export default function Game({
             isCompetitive={vsMode === "ranked" || vsMode === "friend"}
             isStandaloneSans={isStandaloneSans}
             onExit={exitToMenu}
+            onToggleFs={toggleFs}
+            isFs={isFs}
           />
 
           {/* Top Info Bar during MENU / QUEUE / SUMMARY */}
           {phase !== PHASE.PLAYING && phase !== PHASE.COUNTDOWN && (
-            <div className="flex items-center justify-between px-4 py-2 border-b-2 border-white bg-black font-pixel">
-              <div className="flex items-center gap-3">
-                <span className="text-[#ff0000] text-xs animate-heartbeat">❤️</span>
-                <span className="text-xs text-white tracking-wider">
+            <div
+              style={{
+                paddingLeft: "max(6px, env(safe-area-inset-left, 6px))",
+                paddingRight: "max(6px, env(safe-area-inset-right, 6px))",
+                paddingTop: "max(2px, env(safe-area-inset-top, 2px))",
+              }}
+              className="flex items-center justify-between py-1 border-b-2 border-white bg-black font-pixel text-white h-8 sm:h-9 w-full box-border gap-1 sm:gap-2 z-20"
+            >
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <span className="text-[#ff0000] text-[9px] sm:text-xs animate-heartbeat flex-shrink-0">❤️</span>
+                <span className="text-[8px] sm:text-[9.5px] text-white tracking-wider truncate uppercase">
                   {vsMode === "ranked"
                     ? "* RANKED BATTLE"
                     : vsMode === "friend"
                     ? "* FRIEND DUEL"
                     : vsMode === "boss"
                     ? "* BOSS GAUNTLET"
-                    : "* TIME TRIAL SURVIVAL"}
+                    : "* TIME TRIAL"}
                 </span>
               </div>
 
-              <button
-                onClick={() => {
-                  ensureRadianceMusicStoppedImmediately();
-                  exitToMenu();
-                }}
-                className="text-[10px] border-2 border-[#ffff00] text-[#ffff00] hover:bg-[#ffff00] hover:text-black px-3 py-1 transition cursor-pointer"
-              >
-                [ EXIT ]
-              </button>
+              <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => toggleFs()}
+                  className={`h-5 sm:h-6 w-5 sm:w-6 text-[8px] sm:text-[9px] border transition cursor-pointer flex items-center justify-center active:scale-95 leading-none flex-shrink-0 ${
+                    isFs
+                      ? "border-[#00ffff] text-[#00ffff] bg-[#00ffff]/10"
+                      : "border-white/80 text-white hover:bg-white hover:text-black"
+                  }`}
+                  title={isFs ? "Exit Fullscreen" : "Fullscreen"}
+                >
+                  <span>{isFs ? "⊠" : "⛶"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    ensureRadianceMusicStoppedImmediately();
+                    exitToMenu();
+                  }}
+                  className="h-5 sm:h-6 px-1.5 sm:px-2 text-[7.5px] sm:text-[9px] border border-[#ffff00] text-[#ffff00] hover:bg-[#ffff00] hover:text-black transition cursor-pointer font-pixel leading-none active:scale-95 flex items-center justify-center flex-shrink-0"
+                >
+                  <span className="sm:hidden">✕</span>
+                  <span className="hidden sm:inline">[ EXIT ]</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

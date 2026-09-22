@@ -2755,161 +2755,186 @@ export default function Game({
           rad.cameraPunch.zoom += ((rad.cameraPunch.targetZoom || 1) - rad.cameraPunch.zoom) * Math.min(1, dt * 6);
         }
 
-        // Handle Radiance Attacks
-        // Only block slam (type 0) from re-triggering if already slamming; other attacks fire freely
+        // Handle Radiance Attacks: clean mutual-exclusion ensures no impossible overlapping patterns
+        const isBusyWithAttack = (
+          (rad.slamState !== null) ||
+          (rad.lasers && rad.lasers.length > 0) ||
+          (rad.wallSpikes && rad.wallSpikes.length > 0) ||
+          (rad.swordCascades && rad.swordCascades.length > 0) ||
+          (rad.lightPillars && rad.lightPillars.length > 0) ||
+          (rad.celestialStars && rad.celestialStars.length > 0)
+        );
+
         if (elapsedMs >= rad.nextAttackAtMs) {
-          const isEnraged = rad.hp <= 50;
-          const attackType = Math.floor(rngRef.current() * 5);
-          rad.attackType = attackType;
+          if (isBusyWithAttack) {
+            // Wait for existing pattern to finish so player is never trapped by overlapping mechanics
+            rad.nextAttackAtMs = elapsedMs + 400;
+          } else {
+            const isEnraged = rad.hp <= 50;
+            const attackType = Math.floor(rngRef.current() * 5);
+            rad.attackType = attackType;
 
-          if (attackType === 0 && rad.slamState) {
-            // Slam mid-slam: skip this attack and reschedule soon
-            rad.nextAttackAtMs = elapsedMs + 600;
-          } else if (attackType === 0) {
-            // --- ATTACK 0: GROUND SLAM ATTACK ---
-            rad.slamState = "TELEGRAPH";
-            rad.slamTimer = 0;
-            rad.slamTargetX = clamp(p.x, 60, w - 60);
-            rad.slamTargetY = h - 60;
-            rad.slamRadius = 75;
-            const cd = isEnraged ? 2100 : 2700;
-            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
+            if (attackType === 0) {
+              // --- ATTACK 0: GROUND SLAM ATTACK ---
+              rad.slamState = "TELEGRAPH";
+              rad.slamTimer = 0;
+              rad.slamTargetX = clamp(p.x, 100, w - 100);
+              rad.slamTargetY = h - 60;
+              rad.slamRadius = 65;
+              const cd = isEnraged ? 2600 : 3200;
+              rad.nextAttackAtMs = elapsedMs + cd;
 
-          } else if (attackType === 1) {
-            // --- ATTACK 1: CELESTIAL STAR STORM ---
-            rad.celestialStars = [];
-            const starCount = isEnraged ? 40 : 32;
-            for (let s = 0; s < starCount; s++) {
-              const ang = (s / starCount) * Math.PI * 2;
-              const dist = 65 + rngRef.current() * 45;
-              rad.celestialStars.push({
-                x: (rad.x || w / 2) + Math.cos(ang) * dist,
-                y: (rad.y || 120) + Math.sin(ang) * dist,
-                vx: 0,
-                vy: 0,
-                hoverTimer: (isEnraged ? 0.22 : 0.30) + (s % 4) * 0.10,
-                speed: (isEnraged ? 1040 : 920) + rngRef.current() * 160,
-                r: 9,
-                launched: false,
-                trail: [],
-                life: 3.5,
-                elapsed: 0
-              });
-            }
-            playStarChimeSound();
-            const cd = isEnraged ? 1800 : 2300;
-            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
+            } else if (attackType === 1) {
+              // --- ATTACK 1: CELESTIAL STAR STORM (Balanced to 16-20 dodgeable stars) ---
+              rad.celestialStars = [];
+              const starCount = isEnraged ? 20 : 16;
+              for (let s = 0; s < starCount; s++) {
+                const ang = (s / starCount) * Math.PI * 2;
+                const dist = 60 + rngRef.current() * 40;
+                rad.celestialStars.push({
+                  x: (rad.x || w / 2) + Math.cos(ang) * dist,
+                  y: (rad.y || 120) + Math.sin(ang) * dist,
+                  vx: 0,
+                  vy: 0,
+                  hoverTimer: 0.35 + (s % 4) * 0.12,
+                  speed: (isEnraged ? 620 : 530) + rngRef.current() * 70, // readable, fair speed (was 1040+)
+                  spreadOffset: (rngRef.current() - 0.5) * 0.28, // slight fan spread so it's not a pinpoint sniper cloud
+                  r: 8,
+                  launched: false,
+                  trail: [],
+                  life: 2.8,
+                  elapsed: 0
+                });
+              }
+              playStarChimeSound();
+              const cd = isEnraged ? 2600 : 3200;
+              rad.nextAttackAtMs = elapsedMs + cd;
 
-          } else if (attackType === 2) {
-            // --- ATTACK 2: TACTICAL PRESSURE (SWEEPING LASERS, 4-WAY SPIKES, OR NAIL WALL) ---
-            const subRoll = rngRef.current();
-            if (subRoll < 0.45) {
-              const laserCount = isEnraged ? 4 : 3;
-              for (let b = 0; b < laserCount; b++) {
-                rad.lasers.push({
-                  cx: rad.x || w / 2,
-                  cy: rad.y || 120,
-                  angle: (b * Math.PI * 2) / laserCount,
-                  rotSpeed: isEnraged ? 2.3 : 1.9,
-                  length: 1050,
-                  thick: 46,
-                  chargeTime: isEnraged ? 0.55 : 0.65,
-                  activeTime: 2.5,
-                  elapsed: 0,
+            } else if (attackType === 2) {
+              // --- ATTACK 2: TACTICAL PRESSURE (SWEEPING LASERS, TWIN COLUMNS, OR NAIL WALL) ---
+              const subRoll = rngRef.current();
+              if (subRoll < 0.36) {
+                // Sweeping Lasers: 3 trackable beams with 0.85s charge warning
+                const laserCount = 3;
+                for (let b = 0; b < laserCount; b++) {
+                  rad.lasers.push({
+                    cx: rad.x || w / 2,
+                    cy: rad.y || 120,
+                    angle: (b * Math.PI * 2) / laserCount,
+                    rotSpeed: isEnraged ? 1.45 : 1.25, // smooth readable rotation (was 2.3)
+                    length: 1050,
+                    thick: 36, // clean fair thickness (was 46)
+                    chargeTime: 0.85, // generous charge warning (was 0.55)
+                    activeTime: 1.8,
+                    elapsed: 0,
+                    spawnedAtMs: elapsedMs
+                  });
+                }
+                playLaserChargeSound();
+                rad.nextAttackAtMs = elapsedMs + 3400; // ensures lasers expire before next attack
+
+              } else if (subRoll < 0.68) {
+                // Twin Holy Columns: 2 warning hazard beams spaced 280px apart (leaves 75% arena open, no cage!)
+                const isVert = rngRef.current() > 0.5;
+                if (isVert) {
+                  const x1 = clamp(p.x - 140, 50, w - 330);
+                  const x2 = x1 + 280;
+                  rad.wallSpikes.push({ isVert: true, x: x1, y: 0, width: 36, length: 0, maxLength: h, state: "WARN", timer: 0, extendSpeed: 850, spawnedAtMs: elapsedMs });
+                  rad.wallSpikes.push({ isVert: true, x: x2, y: 0, width: 36, length: 0, maxLength: h, state: "WARN", timer: 0, extendSpeed: 850, spawnedAtMs: elapsedMs });
+                } else {
+                  const y1 = clamp(p.y - 120, 50, h - 290);
+                  const y2 = y1 + 240;
+                  rad.wallSpikes.push({ isVert: false, fromLeft: true, x: 0, y: y1, width: 36, length: 0, maxLength: w, state: "WARN", timer: 0, extendSpeed: 850, spawnedAtMs: elapsedMs });
+                  rad.wallSpikes.push({ isVert: false, fromLeft: true, x: 0, y: y2, width: 36, length: 0, maxLength: w, state: "WARN", timer: 0, extendSpeed: 850, spawnedAtMs: elapsedMs });
+                }
+                rad.nextAttackAtMs = elapsedMs + 2800;
+
+              } else {
+                // Radiant Nail Wall: Horizontal sweeping blade curtain with guaranteed safe corridor right at player's Y!
+                const fromLeft = rngRef.current() > 0.5;
+                const safeY = clamp(p.y, 90, h - 90);
+                const corridorHeight = 160; // generous 160px gap to easily step through
+                for (let sy = 50; sy < h - 40; sy += 52) {
+                  if (Math.abs(sy - safeY) < corridorHeight / 2) continue; // safe passage
+                  rad.wallSpikes.push({
+                    isVert: false,
+                    fromLeft: fromLeft,
+                    x: fromLeft ? 0 : w,
+                    y: sy,
+                    width: 28,
+                    length: 0,
+                    maxLength: w * 0.88,
+                    state: "WARN",
+                    timer: 0,
+                    extendSpeed: 750,
+                    spawnedAtMs: elapsedMs
+                  });
+                }
+                rad.nextAttackAtMs = elapsedMs + 3000;
+              }
+
+            } else if (attackType === 3) {
+              // --- ATTACK 3: DIVINE SWORD RAIN ---
+              // Luminous blades descend from the heavens; safe lane is ALWAYS guaranteed near player!
+              if (!rad.swordCascades) rad.swordCascades = [];
+              const waves = 2;
+              for (let wave = 0; wave < waves; wave++) {
+                // Guaranteed reachable safe corridor right where the player is currently fighting!
+                const playerSafeX = clamp(p.x + (rngRef.current() - 0.5) * 60, 110, w - 110);
+                const gap1 = playerSafeX;
+                const gap2 = clamp(gap1 + (rngRef.current() > 0.5 ? 280 : -280), 110, w - 110);
+                const gapWidth = 180; // wide, easy corridor
+                const waveDelay = wave * 0.85;
+
+                for (let colX = 50; colX <= w - 50; colX += 76) {
+                  if (Math.abs(colX - gap1) < gapWidth / 2 || Math.abs(colX - gap2) < gapWidth / 2) {
+                    continue; // safe corridor
+                  }
+                  rad.swordCascades.push({
+                    x: colX,
+                    y: -50,
+                    vy: 0,
+                    width: 14,
+                    height: 52,
+                    state: "WARN",
+                    timer: 0,
+                    warnDuration: 0.90, // generous warning time
+                    delay: waveDelay,
+                    speed: isEnraged ? 640 : 540, // readable speed
+                    spawnedAtMs: elapsedMs
+                  });
+                }
+              }
+              playStarChimeSound();
+              const cd = isEnraged ? 2800 : 3400;
+              rad.nextAttackAtMs = elapsedMs + cd;
+
+            } else if (attackType === 4) {
+              // --- ATTACK 4: SOLAR LIGHT PILLARS ---
+              // Scorching holy columns with 0.85s clear telegraph so taking 2 steps aside avoids damage!
+              if (!rad.lightPillars) rad.lightPillars = [];
+              const pillarCount = isEnraged ? 4 : 3;
+              const targets = [clamp(p.x, 60, w - 60)];
+              for (let k = 1; k < pillarCount; k++) {
+                const offset = (k % 2 === 1 ? 1 : -1) * (180 + Math.floor(k / 2) * 160);
+                targets.push(clamp(p.x + offset + (rngRef.current() - 0.5) * 40, 60, w - 60));
+              }
+              for (const tx of targets) {
+                rad.lightPillars.push({
+                  x: tx,
+                  width: 52, // slim, dodgeable width (was 68)
+                  state: "WARN",
+                  timer: 0,
+                  warnDuration: 0.85, // generous 0.85s reaction time (was 0.48s!)
+                  eruptDuration: 0.55,
+                  hasHitPlayer: false,
                   spawnedAtMs: elapsedMs
                 });
               }
               playLaserChargeSound();
-            } else if (subRoll < 0.75) {
-              const x1 = clamp(p.x + (rngRef.current() > 0.5 ? 115 : -115), 40, w - 40);
-              const x2 = clamp(p.x + (x1 > p.x ? -115 : 115), 40, w - 40);
-              const y1 = clamp(p.y + (rngRef.current() > 0.5 ? 95 : -95), 40, h - 40);
-              const y2 = clamp(p.y + (y1 > p.y ? -95 : 95), 40, h - 40);
-              rad.wallSpikes.push({ isVert: true, x: x1, y: 0, width: 42, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-              rad.wallSpikes.push({ isVert: true, x: x2, y: 0, width: 42, length: 0, maxLength: h, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-              rad.wallSpikes.push({ isVert: false, x: 0, y: y1, width: 42, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-              rad.wallSpikes.push({ isVert: false, x: 0, y: y2, width: 42, length: 0, maxLength: w, state: "WARN", timer: 0, spawnedAtMs: elapsedMs });
-            } else {
-              // Radiant Nail Wall: Horizontal sweeping blade curtain
-              const fromLeft = rngRef.current() > 0.5;
-              const safeY = clamp(p.y + (rngRef.current() - 0.5) * 160, 80, h - 80);
-              for (let sy = 50; sy < h - 40; sy += 55) {
-                if (Math.abs(sy - safeY) < 70) continue;
-                rad.wallSpikes.push({
-                  isVert: false,
-                  x: fromLeft ? 0 : w,
-                  y: sy,
-                  width: 32,
-                  length: 0,
-                  maxLength: w * 0.85,
-                  state: "WARN",
-                  timer: 0,
-                  spawnedAtMs: elapsedMs
-                });
-              }
+              const cd = isEnraged ? 2400 : 2900;
+              rad.nextAttackAtMs = elapsedMs + cd;
             }
-            const cd = isEnraged ? 1500 : 1900;
-            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
-
-          } else if (attackType === 3) {
-            // --- ATTACK 3: DIVINE SWORD RAIN ---
-            // Luminous blades descend from the heavens in 2 waves with wide safe evasion lanes!
-            if (!rad.swordCascades) rad.swordCascades = [];
-            const waves = 2;
-            for (let wave = 0; wave < waves; wave++) {
-              const gap1 = 120 + rngRef.current() * (w - 240);
-              const gap2 = clamp(gap1 + (rngRef.current() > 0.5 ? 300 : -300), 120, w - 120);
-              const gapWidth = 160; // wide, easy safe corridor (was 85)
-              const waveDelay = wave * 0.85; // generous stagger (was 0.52)
-
-              for (let colX = 50; colX <= w - 50; colX += 76) { // relaxed spacing (was 44), ~50% fewer projectiles for mobile smoothness
-                if (Math.abs(colX - gap1) < gapWidth / 2 || Math.abs(colX - gap2) < gapWidth / 2) {
-                  continue; // safe corridor
-                }
-                rad.swordCascades.push({
-                  x: colX,
-                  y: -50,
-                  vy: 0,
-                  width: 14,
-                  height: 52,
-                  state: "WARN",
-                  timer: 0,
-                  warnDuration: 0.85, // generous warning time (was 0.42)
-                  delay: waveDelay,
-                  speed: isEnraged ? 720 : 620, // smooth, readable speed (was 1180 - 1350)
-                  spawnedAtMs: elapsedMs
-                });
-              }
-            }
-            playStarChimeSound();
-            const cd = isEnraged ? 2200 : 2700;
-            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
-
-          } else if (attackType === 4) {
-            // --- ATTACK 4: SOLAR LIGHT PILLARS ---
-            // Scorching holy columns lock onto player and arena zones before roaring into pillars of light!
-            if (!rad.lightPillars) rad.lightPillars = [];
-            const pillarCount = isEnraged ? 5 : 4;
-            const targets = [clamp(p.x, 50, w - 50)];
-            for (let k = 1; k < pillarCount; k++) {
-              const offset = (k % 2 === 1 ? 1 : -1) * (140 + Math.floor(k / 2) * 180);
-              targets.push(clamp(p.x + offset + (rngRef.current() - 0.5) * 60, 50, w - 50));
-            }
-            for (const tx of targets) {
-              rad.lightPillars.push({
-                x: tx,
-                width: 68,
-                state: "WARN",
-                timer: 0,
-                warnDuration: isEnraged ? 0.48 : 0.60,
-                eruptDuration: 0.70,
-                hasHitPlayer: false,
-                spawnedAtMs: elapsedMs
-              });
-            }
-            playLaserChargeSound();
-            const cd = isEnraged ? 1500 : 1900;
-            rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
           }
         }
 
@@ -2938,31 +2963,31 @@ export default function Game({
               rad.cameraPunch.targetZoom = 1.15;
               rad.cameraPunch.offsetY = -20;
             }
-            // Spawn golden shockwave ring
+            // Spawn golden shockwave ring: 360 px/s readable expansion, 300 maxRadius
             rad.shockwaves.push({
               x: rad.slamTargetX,
               y: rad.slamTargetY,
               radius: 15,
-              maxRadius: 380,
-              speed: 500,
-              thickness: 18,
-              life: 0.75,
+              maxRadius: 300,
+              speed: 360, // fair, readable expansion speed (was 500)
+              thickness: 16,
+              life: 0.82,
               elapsed: 0,
               hasHitPlayer: false
             });
-            // Spawn 16 earth debris chunks
-            for (let d = 0; d < 16; d++) {
-              const ang = Math.PI + (rngRef.current() - 0.5) * Math.PI * 1.6;
-              const spd = 200 + rngRef.current() * 320;
+            // Spawn 6 earth debris chunks (clean, non-cluttering)
+            for (let d = 0; d < 6; d++) {
+              const ang = Math.PI + (rngRef.current() - 0.5) * Math.PI * 1.4;
+              const spd = 180 + rngRef.current() * 220;
               rad.earthDebris.push({
-                x: rad.slamTargetX + (rngRef.current() - 0.5) * 30,
+                x: rad.slamTargetX + (rngRef.current() - 0.5) * 20,
                 y: rad.slamTargetY,
                 vx: Math.cos(ang) * spd,
-                vy: -Math.abs(Math.sin(ang)) * spd * 1.2,
-                size: 4 + rngRef.current() * 6,
+                vy: -Math.abs(Math.sin(ang)) * spd * 1.1,
+                size: 4 + rngRef.current() * 4,
                 rotation: rngRef.current() * Math.PI * 2,
-                rotSpeed: (rngRef.current() - 0.5) * 10,
-                life: 0.9 + rngRef.current() * 0.4,
+                rotSpeed: (rngRef.current() - 0.5) * 8,
+                life: 0.8 + rngRef.current() * 0.3,
                 elapsed: 0
               });
             }
@@ -3056,7 +3081,7 @@ export default function Game({
             if (s.hoverTimer <= 0) {
               s.launched = true;
               playStarWhooshSound();
-              const ang = Math.atan2(p.y - s.y, p.x - s.x);
+              const ang = Math.atan2(p.y - s.y, p.x - s.x) + (s.spreadOffset || 0);
               s.vx = Math.cos(ang) * s.speed;
               s.vy = Math.sin(ang) * s.speed;
             }
@@ -3080,7 +3105,8 @@ export default function Game({
           if (sp.state === "WARN" && curElapsed > 0.85) {
             sp.state = "EXTEND";
           } else if (sp.state === "EXTEND") {
-            sp.length += 1200 * dt;
+            const extSpeed = sp.extendSpeed || 850;
+            sp.length += extSpeed * dt;
             if (sp.length >= sp.maxLength) { sp.length = sp.maxLength; sp.state = "RETRACT"; }
           } else if (sp.state === "RETRACT") {
             sp.length -= 800 * dt;
@@ -3954,9 +3980,9 @@ export default function Game({
             const s = rad.celestialStars[i];
             if (s.launched) {
               const dist = Math.hypot(p.x - s.x, p.y - s.y);
-              if (dist < s.r + p.r + 3) {
+              if (dist < s.r + p.r + 2) {
                 tookHit = true;
-                applyDamage(20, null);
+                applyDamage(14, null);
                 rad.celestialStars.splice(i, 1);
                 break;
               }
@@ -3972,7 +3998,7 @@ export default function Game({
               if (Math.abs(distToCenter - sw.radius) < sw.thickness / 2 + p.r) {
                 sw.hasHitPlayer = true;
                 tookHit = true;
-                applyDamage(22, null);
+                applyDamage(14, null);
                 break;
               }
             }
@@ -4002,7 +4028,7 @@ export default function Game({
               if (Math.abs(p.x - pil.x) < pil.width / 2 + p.r - 2) {
                 pil.hasHitPlayer = true;
                 tookHit = true;
-                applyDamage(24, null);
+                applyDamage(16, null);
                 break;
               }
             }
@@ -4022,21 +4048,30 @@ export default function Game({
           }
         }
 
-        // wall spikes
-        if (!tookHit) {
+        // Wall Spikes — physically accurate hitbox supporting both left and right sweeps
+        if (!tookHit && rad.wallSpikes) {
           for (const sp of rad.wallSpikes) {
             if (sp.state === "EXTEND" || sp.state === "RETRACT") {
               if (sp.isVert) {
-                if (Math.abs(p.x - sp.x) < sp.width / 2 + p.r - 2 && p.y < sp.length) { tookHit = true; applyDamage(18, null); break; }
+                if (Math.abs(p.x - sp.x) < sp.width / 2 + p.r - 3 && p.y < sp.length) {
+                  tookHit = true;
+                  applyDamage(16, null);
+                  break;
+                }
               } else {
-                if (Math.abs(p.y - sp.y) < sp.width / 2 + p.r - 2 && p.x < sp.length) { tookHit = true; applyDamage(18, null); break; }
+                const inX = sp.fromLeft ? (p.x <= sp.length) : (p.x >= w - sp.length);
+                if (Math.abs(p.y - sp.y) < sp.width / 2 + p.r - 3 && inX) {
+                  tookHit = true;
+                  applyDamage(16, null);
+                  break;
+                }
               }
             }
           }
         }
 
-        // lasers
-        if (!tookHit) {
+        // Lasers
+        if (!tookHit && rad.lasers) {
           for (const L of rad.lasers) {
             if (L.elapsed >= L.chargeTime) {
               const dx = p.x - L.cx;
@@ -4044,7 +4079,9 @@ export default function Game({
               const distToLine = Math.abs(dx * Math.sin(-L.angle) + dy * Math.cos(-L.angle));
               const forwardDist = dx * Math.cos(L.angle) + dy * Math.sin(L.angle);
               if (distToLine < L.thick / 2 + p.r - 2 && forwardDist > 0 && forwardDist < L.length) {
-                tookHit = true; applyDamage(20, null); break;
+                tookHit = true;
+                applyDamage(16, null);
+                break;
               }
             }
           }
@@ -4945,6 +4982,7 @@ export default function Game({
             ctx.fillRect(sp.x - sp.width / 2, 0, sp.width, sp.length);
           }
         } else {
+          const fromLeft = sp.fromLeft !== false;
           if (sp.state === "WARN") {
             const warnPulse = 0.22 + 0.18 * Math.sin(now / 90);
             ctx.fillStyle = `rgba(255, 215, 0, ${warnPulse})`;
@@ -4956,7 +4994,8 @@ export default function Game({
             ctx.lineTo(w, sp.y);
             ctx.stroke();
           } else {
-            ctx.fillRect(0, sp.y - sp.width / 2, sp.length, sp.width);
+            const startX = fromLeft ? 0 : w - sp.length;
+            ctx.fillRect(startX, sp.y - sp.width / 2, sp.length, sp.width);
           }
         }
         ctx.shadowBlur = 0;

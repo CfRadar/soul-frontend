@@ -11,18 +11,18 @@ export function AuthCard({ onLogin, onSignup, loading, error, clearError, online
   };
 
   return (
-    <div className="max-w-md w-full mx-auto undertale-box p-6 md:p-8 bg-black text-white relative">
+    <div className="max-w-md w-full mx-auto undertale-box p-4 sm:p-6 md:p-8 bg-black text-white relative box-border">
       {/* Soul Heart Icon */}
-      <div className="flex justify-center mb-3">
-        <span className="text-3xl text-[#ff0000] animate-heartbeat">❤️</span>
+      <div className="flex justify-center mb-2 sm:mb-3">
+        <span className="text-2xl sm:text-3xl text-[#ff0000] animate-heartbeat">❤️</span>
       </div>
 
       {/* Header Dialogue */}
-      <div className="text-center mb-6">
-        <h2 className="font-pixel text-base md:text-lg text-white tracking-widest uppercase">
+      <div className="text-center mb-4 sm:mb-6">
+        <h2 className="font-pixel text-sm sm:text-base md:text-lg text-white tracking-widest uppercase">
           SOUL DUEL
         </h2>
-        <p className="font-dialogue text-lg text-neutral-400 mt-1">
+        <p className="font-dialogue text-base sm:text-lg text-neutral-400 mt-1 leading-tight">
           {activeTab === "login"
             ? "* Entering your credentials fills you with DETERMINATION."
             : "* A new human soul prepares to fall underground."}

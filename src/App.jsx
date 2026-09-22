@@ -10,6 +10,7 @@ import MenuBackground from "./components/MenuBackground";
 
 import FriendInviteToast from "./components/FriendInviteToast";
 import PlayWithFriendModal from "./components/PlayWithFriendModal";
+import FloatingFullscreenButton from "./components/FloatingFullscreenButton";
 
 // Lazy-loaded heavy components (frontend-expert code splitting)
 const Game = lazy(() => import("./features/game"));
@@ -118,6 +119,9 @@ export default function App() {
       {/* Global Side Toast for Friend Duel Invites */}
       <FriendInviteToast onAccepted={() => setFriendModalOpen(false)} />
 
+      {/* Global Quick Fullscreen Exit Button (appears whenever in fullscreen outside main nav) */}
+      {(view === VIEW.GAME || !me) && <FloatingFullscreenButton />}
+
       {/* FULL-SCREEN GAME VIEWPORT: Zero scrollbars, maximum screen coverage */}
       {view === VIEW.GAME && me ? (
         <div className="fixed inset-0 z-30 bg-black overflow-hidden flex flex-col items-center justify-center w-full h-full">
@@ -140,10 +144,10 @@ export default function App() {
         </div>
       ) : (
         /* MAIN APPLICATION SHELL (Auth / Menu / Friends / Bosses) */
-        <div className="relative z-10 w-full h-full flex flex-col overflow-hidden p-2 sm:p-2.5 md:p-4">
+        <div className="relative z-10 w-full h-full flex flex-col overflow-hidden p-1.5 sm:p-2.5 md:p-4 box-border">
           {/* Top Navigation Bar */}
           {me && (
-            <div className="mb-2 sm:mb-2.5 md:mb-3 flex-shrink-0">
+            <div className="mb-1.5 sm:mb-2.5 md:mb-3 flex-shrink-0">
               <TopNavBar
                 me={me}
                 socketStatus={socketStatus}

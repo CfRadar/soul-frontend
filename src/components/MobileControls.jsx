@@ -49,6 +49,11 @@ async function triggerFullscreenAndRotate(el = document.documentElement) {
 
 function exitFullscreen() {
   try {
+    if (window.screen?.orientation?.unlock) {
+      window.screen.orientation.unlock();
+    }
+  } catch {}
+  try {
     if (document.exitFullscreen) {
       document.exitFullscreen();
     } else if (document.webkitExitFullscreen) {
@@ -588,7 +593,23 @@ export default function MobileControls({
   visible = true,
   showFullscreenButton = true,
 }) {
-  if (!visible) return null;
+  if (!visible) {
+    if (!onExit && !showFullscreenButton) return null;
+    return (
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 40,
+          boxSizing: "border-box",
+        }}
+      >
+        {onExit && <ExitMatchButton onExit={onExit} />}
+        {showFullscreenButton && <FullscreenButton />}
+      </div>
+    );
+  }
 
   return (
     <div

@@ -196,27 +196,27 @@ export default function LeaderboardPanel({ me }) {
               return (
                 <div
                   key={player.uid}
-                  className={`border-2 p-2 flex items-center gap-2 text-xs transition ${
+                  className={`border sm:border-2 p-1.5 sm:p-2 flex items-center gap-1.5 sm:gap-2 text-xs transition min-w-0 ${
                     isMe
                       ? "border-[#ffff00] bg-white/10"
                       : "border-white/30 hover:border-white"
                   }`}
                 >
-                  <div className={`w-6 font-pixel text-[10px] text-center ${posColor} flex-shrink-0`}>
+                  <div className={`w-5 sm:w-6 font-pixel text-[9px] sm:text-[10px] text-center ${posColor} flex-shrink-0`}>
                     #{pos}
                   </div>
 
                   <RankIcon rank={player.rank} />
 
-                  <div className="flex-1 truncate font-pixel text-[10px] text-white">
+                  <div className="flex-1 min-w-0 truncate font-pixel text-[9px] sm:text-[10px] text-white">
                     {safeUsername(player.username)}
                   </div>
 
-                  <div className="text-[12px] font-dialogue text-neutral-400 flex-shrink-0">
+                  <div className="text-[11px] sm:text-[12px] font-dialogue text-neutral-400 flex-shrink-0 whitespace-nowrap">
                     {getWinrate(player.wins, player.losses)}
                   </div>
 
-                  <div className="text-right font-pixel text-[10px] text-neutral-300 flex-shrink-0">
+                  <div className="text-right font-pixel text-[9px] sm:text-[10px] text-neutral-300 flex-shrink-0 whitespace-nowrap">
                     {player.rating} EXP
                   </div>
                 </div>
@@ -253,23 +253,23 @@ export default function LeaderboardPanel({ me }) {
               return (
                 <div
                   key={player.uid}
-                  className={`border-2 p-2.5 flex items-center gap-2.5 transition ${
+                  className={`border sm:border-2 p-1.5 sm:p-2.5 flex items-center gap-1.5 sm:gap-2.5 transition min-w-0 ${
                     isMe
                       ? "border-[#00ffff] bg-white/10"
                       : "border-white/40 hover:border-white"
                   }`}
                 >
-                  <div className={`w-6 font-pixel text-[10px] text-center ${posColor} flex-shrink-0`}>
+                  <div className={`w-5 sm:w-6 font-pixel text-[9px] sm:text-[10px] text-center ${posColor} flex-shrink-0`}>
                     #{pos}
                   </div>
 
                   <RankIcon rank={rankKey} />
 
                   <div className="flex-1 min-w-0">
-                    <div className="truncate font-pixel text-[11px] text-white">
+                    <div className="truncate font-pixel text-[9px] sm:text-[11px] text-white">
                       {safeUsername(player.username)}
                     </div>
-                    <div className="font-pixel text-[8px] text-neutral-400 tracking-wider">
+                    <div className="font-pixel text-[7.5px] sm:text-[8px] text-neutral-400 tracking-wider truncate">
                       {title}
                     </div>
                   </div>

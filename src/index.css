@@ -4,61 +4,108 @@
 
 html, body, #root {
   height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   background-color: #000000;
   color: #ffffff;
   font-family: 'VT323', monospace;
   letter-spacing: 0.05em;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .font-pixel {
   font-family: 'Press Start 2P', monospace;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .font-dialogue {
   font-family: 'VT323', monospace;
 }
 
-/* Undertale Battle Boxes */
+/* Undertale Battle Boxes - Desktop */
 .undertale-box {
   background-color: #000000;
-  border: 4px solid #ffffff;
+  border: 3px solid #ffffff;
   box-shadow: 0 0 0 2px #000000, 0 0 0 4px #ffffff;
+  box-sizing: border-box;
 }
 
 .undertale-box-thin {
   background-color: #000000;
   border: 2px solid #ffffff;
+  box-sizing: border-box;
 }
 
 .undertale-box-orange {
   background-color: #000000;
   border: 3px solid #ff9900;
   box-shadow: 0 0 0 2px #000000, 0 0 0 3px #ff9900;
+  box-sizing: border-box;
 }
 
 .undertale-box-cyan {
   background-color: #000000;
   border: 3px solid #00ffff;
   box-shadow: 0 0 0 2px #000000, 0 0 0 3px #00ffff;
+  box-sizing: border-box;
 }
 
 .undertale-box-yellow {
   background-color: #000000;
   border: 3px solid #ffff00;
   box-shadow: 0 0 0 2px #000000, 0 0 0 3px #ffff00;
+  box-sizing: border-box;
 }
 
 .undertale-box-green {
   background-color: #000000;
   border: 3px solid #00ff00;
   box-shadow: 0 0 0 2px #000000, 0 0 0 3px #00ff00;
+  box-sizing: border-box;
 }
 
 .undertale-box-purple {
   background-color: #000000;
   border: 3px solid #e0aaff;
   box-shadow: 0 0 0 2px #000000, 0 0 0 3px #e0aaff;
+  box-sizing: border-box;
+}
+
+/* Mobile Optimizations (< 640px): Prevent Box-Shadow from blowing out of viewport */
+@media (max-width: 640px) {
+  .undertale-box {
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 0 1px #000000, 0 0 0 2px #ffffff;
+  }
+  .undertale-box-orange {
+    border: 2px solid #ff9900;
+    box-shadow: 0 0 0 1px #000000, 0 0 0 2px #ff9900;
+  }
+  .undertale-box-cyan {
+    border: 2px solid #00ffff;
+    box-shadow: 0 0 0 1px #000000, 0 0 0 2px #00ffff;
+  }
+  .undertale-box-yellow {
+    border: 2px solid #ffff00;
+    box-shadow: 0 0 0 1px #000000, 0 0 0 2px #ffff00;
+  }
+  .undertale-box-green {
+    border: 2px solid #00ff00;
+    box-shadow: 0 0 0 1px #000000, 0 0 0 2px #00ff00;
+  }
+  .undertale-box-purple {
+    border: 2px solid #e0aaff;
+    box-shadow: 0 0 0 1px #000000, 0 0 0 2px #e0aaff;
+  }
+}
+
+/* Smooth Touch Scrolling & Containment */
+.overflow-y-auto, .overflow-auto {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 /* Retro Pixel Custom Scrollbar */

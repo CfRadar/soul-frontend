@@ -1644,7 +1644,7 @@ export default function Game({
       setPhase(PHASE.COUNTDOWN);
 
       const countdownStart = Date.now();
-      const countdownDuration = 3000;
+      const countdownDuration = 5000;
       const gameStart = countdownStart + countdownDuration;
       setStartAt(gameStart);
 

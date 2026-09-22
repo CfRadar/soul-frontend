@@ -2130,45 +2130,45 @@ export default function Game({
         // Missiles descend from above onto the arena, with laser markers indicating their impact zones.
         // Players must quickly move away from the targeted areas to avoid damage.
         playLaserTargetLockSound();
-        const isTracking = rand() > 0.25; // 75% tracking (was 60%)
-        const missileCount = isTracking ? 6 : 7; // more missiles
+        const isTracking = rand() > 0.4;
+        const missileCount = isTracking ? 4 : 4; // reduced from 6-7 to 4 for clean mobile performance
 
         for (let m = 0; m < missileCount; m++) {
           let targetX, targetY;
-          const delay = m * 0.22; // tighter stagger (was 0.28)
-          const chargeDuration = 0.75 + delay; // faster charge (was 0.95)
+          const delay = m * 0.32; // relaxed stagger
+          const chargeDuration = 1.1 + delay; // generous charge time so mobile players can react
 
           if (isTracking) {
-            // Tracking Salvo: aggressive lead prediction
-            const leadDist = 60; // more lead (was 45)
+            // Tracking Salvo: moderate lead prediction
+            const leadDist = 35; // reduced lead
             const pDirX = dashRef.current.lastDx || 0;
             const pDirY = dashRef.current.lastDy || 0;
             targetX = clamp(p.x + pDirX * leadDist * m + (rand() - 0.5) * 35, 50, w - 50);
             targetY = clamp(p.y + pDirY * leadDist * m + (rand() - 0.5) * 35, 50, h - 50);
           } else {
-            // Grid Bombing: denser coverage
-            const col = m % 3;
-            const row = Math.floor(m / 3);
-            targetX = clamp(w * 0.18 + col * (w * 0.32) + (rand() - 0.5) * 30, 50, w - 50);
-            targetY = clamp(h * 0.28 + row * (h * 0.35) + (rand() - 0.5) * 30, 50, h - 50);
+            // Grid Bombing: clean spread
+            const col = m % 2;
+            const row = Math.floor(m / 2);
+            targetX = clamp(w * 0.25 + col * (w * 0.5) + (rand() - 0.5) * 40, 50, w - 50);
+            targetY = clamp(h * 0.28 + row * (h * 0.4) + (rand() - 0.5) * 40, 50, h - 50);
           }
 
           boss.missileLasers.push({
             id: Math.random(),
             targetX,
             targetY,
-            radius: 50,
+            radius: 38, // smaller blast radius (was 50)
             chargeDuration,
             chargeElapsed: 0,
             state: "TARGETING",
             missileY: -140,
-            speed: 1700, // faster descent (was 1250)
+            speed: 950, // readable descent speed (was 1700)
             explosionElapsed: 0,
             explosionLife: 0.35,
             hasHitPlayer: false
           });
         }
-        boss.nextAttackMs = elapsedMs + 2000 + rand() * 300; // faster cooldown (was 2800+400)
+        boss.nextAttackMs = elapsedMs + 2800 + rand() * 400; // relaxed cooldown
 
       } else if (attackType === 1) {
         // --- UNDYING ATTACKS ---
@@ -2847,16 +2847,16 @@ export default function Game({
 
           } else if (attackType === 3) {
             // --- ATTACK 3: DIVINE SWORD RAIN ---
-            // Luminous blades descend from the heavens in 2 rapid waves with safe evasion lanes!
+            // Luminous blades descend from the heavens in 2 waves with wide safe evasion lanes!
             if (!rad.swordCascades) rad.swordCascades = [];
             const waves = 2;
             for (let wave = 0; wave < waves; wave++) {
-              const gap1 = 80 + rngRef.current() * (w - 160);
-              const gap2 = clamp(gap1 + (rngRef.current() > 0.5 ? 260 : -260), 80, w - 80);
-              const gapWidth = 85;
-              const waveDelay = wave * 0.52;
+              const gap1 = 120 + rngRef.current() * (w - 240);
+              const gap2 = clamp(gap1 + (rngRef.current() > 0.5 ? 300 : -300), 120, w - 120);
+              const gapWidth = 160; // wide, easy safe corridor (was 85)
+              const waveDelay = wave * 0.85; // generous stagger (was 0.52)
 
-              for (let colX = 35; colX <= w - 35; colX += 44) {
+              for (let colX = 50; colX <= w - 50; colX += 76) { // relaxed spacing (was 44), ~50% fewer projectiles for mobile smoothness
                 if (Math.abs(colX - gap1) < gapWidth / 2 || Math.abs(colX - gap2) < gapWidth / 2) {
                   continue; // safe corridor
                 }
@@ -2864,19 +2864,19 @@ export default function Game({
                   x: colX,
                   y: -50,
                   vy: 0,
-                  width: 18,
-                  height: 64,
+                  width: 14,
+                  height: 52,
                   state: "WARN",
                   timer: 0,
-                  warnDuration: 0.42,
+                  warnDuration: 0.85, // generous warning time (was 0.42)
                   delay: waveDelay,
-                  speed: isEnraged ? 1350 : 1180,
+                  speed: isEnraged ? 720 : 620, // smooth, readable speed (was 1180 - 1350)
                   spawnedAtMs: elapsedMs
                 });
               }
             }
             playStarChimeSound();
-            const cd = isEnraged ? 1700 : 2200;
+            const cd = isEnraged ? 2200 : 2700;
             rad.nextAttackAtMs = elapsedMs + cd + rngRef.current() * 200;
 
           } else if (attackType === 4) {
@@ -3981,7 +3981,7 @@ export default function Game({
               if (Math.abs(p.x - sw.x) < sw.width / 2 + p.r - 2 &&
                   p.y >= sw.y - sw.height / 2 && p.y <= sw.y + sw.height / 2 + 10) {
                 tookHit = true;
-                applyDamage(22, null);
+                applyDamage(14, null);
                 rad.swordCascades.splice(i, 1);
                 break;
               }
@@ -4997,26 +4997,19 @@ export default function Game({
 
           if (sc.state === "WARN") {
             const warnRatio = Math.min(1, activeTime / sc.warnDuration);
-            const pulse = 0.4 + 0.6 * Math.sin(now / 70);
 
-            // Floor warning corridor
-            ctx.fillStyle = `rgba(255, 215, 0, ${0.08 + warnRatio * 0.15})`;
-            ctx.fillRect(sc.x - sc.width / 2, 0, sc.width, h);
-
-            // Thin vertical guide ray
-            ctx.strokeStyle = `rgba(255, 235, 120, ${0.4 + warnRatio * 0.5})`;
-            ctx.lineWidth = 1.5;
+            // Thin vertical guide ray (crisp, zero-lag guide without heavy full-screen alpha fill)
+            ctx.strokeStyle = `rgba(255, 235, 120, ${0.25 + warnRatio * 0.45})`;
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(sc.x, 0);
             ctx.lineTo(sc.x, h);
             ctx.stroke();
 
-            // Blade glyph at top
+            // Blade glyph at top (crisp white blade with golden outline, zero shadowBlur)
             ctx.save();
-            ctx.translate(sc.x, 30);
+            ctx.translate(sc.x, 24);
             ctx.fillStyle = "#ffffff";
-            ctx.shadowColor = "gold";
-            ctx.shadowBlur = 15 * pulse;
             ctx.beginPath();
             ctx.moveTo(0, sc.height / 2);
             ctx.lineTo(-sc.width / 2, -sc.height / 4);
@@ -5025,31 +5018,25 @@ export default function Game({
             ctx.lineTo(sc.width / 2, -sc.height / 4);
             ctx.closePath();
             ctx.fill();
-            ctx.strokeStyle = "rgba(255, 215, 0, 0.9)";
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#ffd700";
+            ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.restore();
           } else if (sc.state === "FALLING") {
             ctx.save();
             ctx.translate(sc.x, sc.y);
 
-            // Motion blur wake trail
-            const grad = ctx.createLinearGradient(0, -sc.height * 1.5, 0, sc.height / 2);
-            grad.addColorStop(0, "rgba(255, 215, 0, 0)");
-            grad.addColorStop(0.6, "rgba(255, 225, 100, 0.5)");
-            grad.addColorStop(1, "rgba(255, 255, 255, 0.95)");
-            ctx.fillStyle = grad;
+            // Fast, lightweight wake trail (replaces dynamic per-frame linear gradient)
+            ctx.fillStyle = "rgba(255, 225, 100, 0.35)";
             ctx.beginPath();
-            ctx.moveTo(0, sc.height / 2 + 10);
-            ctx.lineTo(-sc.width / 2 - 2, -sc.height * 1.2);
-            ctx.lineTo(sc.width / 2 + 2, -sc.height * 1.2);
+            ctx.moveTo(0, sc.height / 2 + 8);
+            ctx.lineTo(-sc.width / 2 - 1, -sc.height * 0.9);
+            ctx.lineTo(sc.width / 2 + 1, -sc.height * 0.9);
             ctx.closePath();
             ctx.fill();
 
-            // Blade body
+            // Blade body (pure white with bright golden border, zero shadowBlur for 60fps mobile)
             ctx.fillStyle = "#ffffff";
-            ctx.shadowColor = "gold";
-            ctx.shadowBlur = 20;
             ctx.beginPath();
             ctx.moveTo(0, sc.height / 2);
             ctx.lineTo(-sc.width / 2, -sc.height / 4);
@@ -5060,8 +5047,8 @@ export default function Game({
             ctx.fill();
 
             // Crossguard & golden trim
-            ctx.strokeStyle = "rgba(255, 220, 80, 1)";
-            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = "#ffd700";
+            ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.beginPath();
             ctx.moveTo(-sc.width, -sc.height / 4);

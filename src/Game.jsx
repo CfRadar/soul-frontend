@@ -1830,6 +1830,15 @@ export default function Game({
     phaseRef.current = PHASE.PLAYING;
     setPhase(PHASE.PLAYING);
 
+    // Immediately spawn an initial wave so bullets are visibly active on frame 1
+    const canvas = canvasRef.current;
+    const w = canvas?.width || 980;
+    const h = canvas?.height || 540;
+    if (mode !== "boss") {
+      spawnBullets(w, h, 0);
+      spawnRef.current.nextSpawnAtMs = 500;
+    }
+
     loop._lastNow = undefined;
 
     cancelAnimationFrame(rafRef.current);
@@ -2026,17 +2035,16 @@ export default function Game({
     const rand = rngRef.current;
     const pattern = Math.floor(rand() * 3);
 
-    // Scale particle count based on difficulty (4 to 12, slower growth)
-    const scaledCount = Math.floor(4 + difficulty * 8);
-    // Scale speed based on difficulty (60 to 150, slower growth)
-    const speedScale = 60 + difficulty * 90;
+    // Scale particle count based on difficulty (5 to 13)
+    const scaledCount = Math.floor(5 + difficulty * 8);
+    // Base speed: snappy, responsive retro speed (160 to 250 px/s, was 60)
+    const baseSpeed = 160 + difficulty * 70;
 
     if (pattern === 0) {
-      const cx = 80 + rand() * (w - 160);
-      const cy = 80 + rand() * (h - 160);
+      const cx = 100 + rand() * (w - 200);
+      const cy = 100 + rand() * (h - 200);
       const count = scaledCount;
-      const baseSpeed = 60 + difficulty * 50;
-      const speed = baseSpeed + rand() * 90;
+      const speed = baseSpeed + rand() * 60;
 
       for (let i = 0; i < count; i++) {
         const ang = (i / count) * Math.PI * 2;
@@ -2045,42 +2053,38 @@ export default function Game({
           y: cy,
           vx: Math.cos(ang) * speed,
           vy: Math.sin(ang) * speed,
-          r: 6 + rand() * 3,
-          alpha: 0.5 + difficulty * 0.5,
+          r: 6 + rand() * 2.5,
+          alpha: 0.6 + difficulty * 0.4,
         });
       }
     } else if (pattern === 1) {
       const fromLeft = rand() < 0.5;
-      // Scale rows from 3 to 8 based on difficulty (slower growth)
       const rows = Math.floor(3 + difficulty * 5);
-      const baseSpeed = 60 + difficulty * 75;
-      const speed = baseSpeed + rand() * 120;
+      const speed = baseSpeed + rand() * 80;
 
       for (let i = 0; i < rows; i++) {
         const y = (i + 1) * (h / (rows + 1));
         bulletsRef.current.push({
-          x: fromLeft ? -10 : w + 10,
+          x: fromLeft ? 0 : w,
           y,
           vx: fromLeft ? speed : -speed,
           vy: (rand() - 0.5) * 40,
           r: 7,
-          alpha: 0.5 + difficulty * 0.5,
+          alpha: 0.6 + difficulty * 0.4,
         });
       }
     } else {
-      // Scale count from 3 to 11 based on difficulty (slower growth)
-      const count = Math.floor(3 + difficulty * 8);
-      const baseSpeed = 60 + difficulty * 90;
-      const speed = baseSpeed + rand() * 120;
+      const count = Math.floor(4 + difficulty * 8);
+      const speed = baseSpeed + rand() * 80;
 
       for (let i = 0; i < count; i++) {
         bulletsRef.current.push({
-          x: rand() * w,
-          y: -12 - rand() * 120,
-          vx: (rand() - 0.5) * 40,
+          x: 40 + rand() * (w - 80),
+          y: 0,
+          vx: (rand() - 0.5) * 50,
           vy: speed,
           r: 6 + rand() * 2,
-          alpha: 0.5 + difficulty * 0.5,
+          alpha: 0.6 + difficulty * 0.4,
         });
       }
     }
